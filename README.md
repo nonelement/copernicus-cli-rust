@@ -12,4 +12,4 @@ Registration [here](https://documentation.dataspace.copernicus.eu/Registration.h
 
 ## Running / Testing
 
-Run `cargo run -- --bbox \'-75.201704,39.981552,-75.114099,39.915099\'` while int he project folder to test. Authentication and list operations may take some time.
+Run `cargo run -- --bbox=-75.201704,39.981552,-75.114099,39.915099` while int he project folder to test. Authentication and list operations may take some time.

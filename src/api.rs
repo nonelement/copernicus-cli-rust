@@ -39,6 +39,8 @@ enum AuthState {
     NeedsReauthentication,
 }
 
+// Authentication
+
 fn get_auth_state(auth_details: &AuthDetails) -> Result<AuthState, Box<dyn Error>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let is_expired = now > (auth_details.acquired_time + auth_details.expires_in as u64).try_into()?;
@@ -119,6 +121,8 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
     ]);
     Ok(authenticate(&form_body).await?)
 }
+
+// API Interactions
 
 pub async fn list_imagery(client: &Client, auth_details: &AuthDetails, bbox: String) -> Result<FeatureCollection, Box<dyn Error>> {
     let clean_bbox = &bbox[1..bbox.len()-1];

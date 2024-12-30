@@ -47,7 +47,7 @@ impl ::std::default::Default for Config {
 #[derive(Parser, Debug)]
 struct Args {
     // A bounding box to search by
-    #[arg(id="bbox", short, long)]
+    #[arg(id="bbox", long)]
     query_bbox_string: String,
 }
 
@@ -64,6 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     dotenv().ok();
     let args = Args::parse();
+
     let mut config: Config = confy::load(APP_NAME, None)?;
     let credentials = get_env_creds();
 

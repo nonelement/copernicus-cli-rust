@@ -8,10 +8,10 @@ use serde_json::Value;
 
 const FEATURE_DETAILS_FORMAT: &str = r#"
 <ID> (<SHORT_NAME>.<SERIAL>/<DETAIL>)
-<CAPTURE_TIME> cloudy:<CLOUD_COVER>
-bbox: <BBOX>
-quicklook: <QUICKLOOK_HREF>
-archive: <PRODUCT_HREF>
+  <CAPTURE_TIME> cloudy:<CLOUD_COVER>
+  bbox: <BBOX>
+  quicklook: <QUICKLOOK_HREF>
+  archive: <PRODUCT_HREF>
 "#;
 
 
