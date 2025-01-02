@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+
+use colored::Colorize;
 use geojson::{Feature, FeatureCollection};
 use geojson::feature::Id;
 use geojson::JsonObject;
@@ -6,14 +8,48 @@ use geojson::JsonValue;
 use serde_json::map::Map;
 use serde_json::Value;
 
+const STYLES: [(&'static str, &'static str); 9] = [
+    ("ID", "White"),
+    ("SHORT_NAME", "White"),
+    ("SERIAL", "White"),
+    ("DETAIL", "White"),
+    ("CAPTURE_TIME", "White"),
+    ("CLOUD_COVER", "White"),
+    ("BBOX", "White"),
+    ("QUICKLOOK_HREF", "White"),
+    ("PRODUCT_HREF", "White"),
+];
+
+
 const FEATURE_DETAILS_FORMAT: &str = r#"
 <ID> (<SHORT_NAME>.<SERIAL>/<DETAIL>)
-  <CAPTURE_TIME> cloudy:<CLOUD_COVER>
+  <CAPTURE_TIME> cloudy: <CLOUD_COVER>
   bbox: <BBOX>
   quicklook: <QUICKLOOK_HREF>
   archive: <PRODUCT_HREF>
 "#;
 
+fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
+    let style = styles.get(k);
+    match style {
+        Some(s) => {
+            match *s {
+                "White" => v.as_str().white().to_string(),
+                "BrightWhite" => v.as_str().bright_white().to_string(),
+                "BrightBlack" => v.as_str().bright_black().to_string(),
+                "Green" => v.as_str().green().to_string(),
+                "Cyan" => v.as_str().cyan().to_string(),
+                "BrightCyan" => v.as_str().bright_cyan().to_string(),
+                "Blue" => v.as_str().blue().to_string(),
+                "Purple" => v.as_str().purple().to_string(),
+                "BrightBlue" => v.as_str().bright_blue().to_string(),
+                "Red" => v.as_str().red().to_string(),
+                _ => v
+            }
+        },
+        None => v,
+    }
+}
 
 pub fn format_feature_collection(fc: &FeatureCollection) -> String {
     let mut output: Vec<String> = Vec::new();
@@ -65,10 +101,12 @@ pub fn format_feature(f: &Feature) -> String {
 
 // Try this with pure accessor methods and the template at the top
 fn format_with_template(template: &str, data: &HashMap<&str, String>) -> String {
-    let mut compiled = String::from(template);
+    let mut compiled = String::from(template).truecolor(64, 64, 64).to_string();
+    let styles = HashMap::from(STYLES);
     for (k, v) in data {
         let tag = format!("<{}>", k);
-        compiled = compiled.replace(&tag, v);
+        let value = style_value(&k, v.clone(), &styles);
+        compiled = compiled.replace(&tag, &value);
     }
-    return compiled;
+    return compiled.to_string();
 }

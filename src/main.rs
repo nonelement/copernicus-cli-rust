@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate colored;
 extern crate confy;
 extern crate dotenv;
 extern crate env_logger;
