@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::offset::Utc;
 use geojson::FeatureCollection;
-use serde::{Serialize, Deserialize};
-use reqwest::{Client, Response};
 use log::info;
+use reqwest::{Client, Response};
+use serde::{Serialize, Deserialize};
+use url::Url;
 
 pub struct Credentials {
     pub user: Option<String>,
@@ -15,13 +17,13 @@ pub struct Credentials {
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 // GET
-const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-2/items?bbox=<BBOX>";
+const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-2/items";
 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AuthDetails {
     #[serde(default)]
-    pub acquired_time: u64, // When authentication was acquired, to check current age
+    pub acquired_time: i64, // When authentication was acquired, to check current age
     pub access_token: String,
     pub expires_in: i32,
     pub refresh_token: String,
@@ -43,8 +45,8 @@ enum AuthState {
 
 fn get_auth_state(auth_details: &AuthDetails) -> Result<AuthState, Box<dyn Error>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let is_expired = now > (auth_details.acquired_time + auth_details.expires_in as u64).try_into()?;
-    let is_refresh_expired = now > (auth_details.acquired_time + auth_details.refresh_expires_in as u64).try_into()?;
+    let is_expired = now > (auth_details.acquired_time + auth_details.expires_in as i64).try_into()?;
+    let is_refresh_expired = now > (auth_details.acquired_time + auth_details.refresh_expires_in).try_into()?;
     match (is_expired, is_refresh_expired) {
         (false, false) => Ok(AuthState::IsOK),
         (true, false) => Ok(AuthState::NeedsRefresh),
@@ -91,7 +93,7 @@ async fn authenticate(form_body: &HashMap<&str, String>) -> Result<AuthDetails, 
     if response.status().is_success() {
         let body = response.text().await.unwrap();
         let mut auth_details: AuthDetails = serde_json::from_str(&body)?;
-        auth_details.acquired_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        auth_details.acquired_time = Utc::now().timestamp();
         return Ok(auth_details);
     } else {
         // Debug ok here, since this is effectively a stop error
@@ -124,10 +126,55 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 
 // API Interactions
 
-// TODO: This only supports bbox for now. Implement other args and convert to Options.
-pub async fn list_imagery(client: &Client, auth_details: &AuthDetails, bbox: String) -> Result<FeatureCollection, Box<dyn Error>> {
-    let clean_bbox = &bbox[1..bbox.len()-1];
-    let url = LIST_URL.replace("<BBOX>", clean_bbox);
+// Matches interface provided by Url.set_query
+// Example: https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items? /
+//  bbox=-80.673805,-0.52849,-78.060341,1.689651&datetime=2014-10-13T23:28:54.650Z
+fn parse_options(
+    bbox_opt: Option<String>,
+    from_opt: Option<String>,
+    to_opt: Option<String>,
+    sortby_opt: Option<String>
+) -> Option<String> {
+    let mut options: Vec<String> = Vec::new();
+
+    if let Some(bbox) = bbox_opt {
+        options.push(format!("bbox={}", bbox));
+    }
+
+    if from_opt.is_some() || to_opt.is_some() {
+        options.push(format!(
+            "datetime={}/{}",
+            from_opt.unwrap_or(String::from("")),
+            to_opt.unwrap_or(String::from(""))
+        ));
+    }
+
+    if let Some(sortby) = sortby_opt {
+        options.push(format!("sortby={}", sortby));
+    }
+
+    if options.len() > 0 {
+        Some(options.join("&"))
+    } else {
+        None
+    }
+}
+
+// TODO:
+//  add id, limit, page params too.
+//  encapsulate options here too, somehow
+pub async fn list_imagery(
+    client: &Client,
+    auth_details: &AuthDetails,
+    bbox: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+    sortby: Option<String>
+) -> Result<FeatureCollection, Box<dyn Error>> {
+    let mut url: Url = Url::parse(LIST_URL)?;
+    let query_params = parse_options(bbox, from, to, sortby);
+    url.set_query(query_params.as_deref());
+
     info!("API::list_imagery: Requesting {}...", url);
     let response_text = client
         .get(url)
@@ -135,3 +182,4 @@ pub async fn list_imagery(client: &Client, auth_details: &AuthDetails, bbox: Str
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
     return Ok(serde_json::from_str::<FeatureCollection>(&response_text)?);
 }
+

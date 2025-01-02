@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::error::Error;
 
+use chrono::offset::Utc;
+use chrono::DateTime;
 use colored::Colorize;
 use geojson::{Feature, FeatureCollection};
 use geojson::feature::Id;
@@ -7,6 +10,9 @@ use geojson::JsonObject;
 use geojson::JsonValue;
 use serde_json::map::Map;
 use serde_json::Value;
+
+const DTZ_FORMAT: &'static str = "%Y-%M-%DT%h:%m:%sZ";
+const DZ_FORMAT: &'static str = "%Y-%M-%D";
 
 const STYLES: [(&'static str, &'static str); 9] = [
     ("ID", "White"),
@@ -109,4 +115,22 @@ fn format_with_template(template: &str, data: &HashMap<&str, String>) -> String 
         compiled = compiled.replace(&tag, &value);
     }
     return compiled.to_string();
+}
+
+// Parsing
+
+pub fn get_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
+    let s = s.as_str();
+    let parsed = DateTime::parse_from_str(s, DTZ_FORMAT);
+    match parsed {
+        Ok(dt) => Ok(dt.into()),
+        Err(_e) => {
+            let parsed = DateTime::parse_from_str(s, DZ_FORMAT);
+            if let Ok(dt) = parsed {
+                Ok(dt.into())
+            } else {
+                Err(format!("Unable to parse: {}", s).into())
+            }
+        }
+    }
 }

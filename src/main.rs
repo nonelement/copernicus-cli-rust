@@ -1,3 +1,4 @@
+extern crate chrono;
 #[macro_use]
 extern crate clap;
 extern crate colored;
@@ -11,16 +12,18 @@ extern crate serde;
 extern crate serde_json;
 extern crate spinners;
 extern crate tokio;
-
-use std::env::var;
-use std::error::Error;
-use dotenv::dotenv;
-use serde::{Serialize, Deserialize};
-use spinners::{Spinner, Spinners};
-use clap::{ArgGroup, Command, Parser};
+extern crate url;
 
 mod api;
 mod util;
+
+use std::env::var;
+use std::error::Error;
+
+use dotenv::dotenv;
+use serde::{Serialize, Deserialize};
+use spinners::{Spinner, Spinners};
+use clap::{Arg, ArgGroup, Command, Parser};
 
 use api::{AuthDetails, Credentials, check_auth, list_imagery};
 use util::format_feature_collection;
@@ -53,7 +56,11 @@ struct Args {
     #[arg(long)]
     bbox: Option<String>,
     #[arg(long)]
-    datetime: Option<String>,
+    from: Option<String>,
+    #[arg(long)]
+    to: Option<String>,
+    #[arg(long)]
+    sortby: Option<String>,
 }
 
 fn get_env_creds() -> Credentials {
@@ -64,20 +71,38 @@ fn get_env_creds() -> Credentials {
 }
 
 fn get_args() -> Args {
+    // Requires one flag of: bbox, datetime, to, from
+    // datetime is exclusive with to and from
     let parsed = Command::new(COMMAND_NAME)
-        .arg(arg!(--bbox <bbox> "provide a bounding box"))
-        .arg(arg!(--datetime <datetime> "filter by datetime"))
+        .arg(Arg::new("bbox")
+                .long("bbox")
+                .help("provides a bounding box for the query(top left, bottom right)")
+        )
+        .arg(Arg::new("from")
+                .long("from")
+                .help("start of range to query by: YYYY-DD-MMTHH:MM:SSZ or YYYY-DD-MM")
+        )
+        .arg(Arg::new("to")
+                .long("to")
+                .help("end of range to query by: YYYY-DD-MMTHH:MM:SSZ or YYYY-DD-MM")
+        )
+        .arg(Arg::new("sortby")
+                .long("sortby")
+                .help("sort query results by direction, field. [+|-][start_datetime | end_datetime | datetime]")
+        )
         .group(ArgGroup::new("required.args")
-            .args(["bbox", "datetime"])
+            .args(["bbox", "from", "to", "sortby"])
             .required(true)
             .multiple(true)
-        ).get_matches();
+        )
+        .get_matches();
 
     let args = Args {
         bbox: parsed.get_one::<String>("bbox").cloned(),
-        datetime: parsed.get_one::<String>("datetime").cloned()
+        from: parsed.get_one::<String>("from").cloned(),
+        to: parsed.get_one::<String>("to").cloned(),
+        sortby: parsed.get_one::<String>("sortby").cloned()
     };
-
 
     return args;
 }
@@ -114,7 +139,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     confy::store(APP_NAME, None, config)?;
 
     let mut s = Spinner::new(Spinners::Dots, "Querying for imagery at bbox...".into());
-    let fc = list_imagery(&client, &auth_details, args.bbox.unwrap()).await?;
+    let fc = list_imagery(&client, &auth_details, args.bbox, args.from, args.to, args.sortby).await?;
     s.stop_with_newline();
     println!("features:\n{}", format_feature_collection(&fc));
 

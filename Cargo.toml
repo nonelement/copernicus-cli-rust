@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+chrono = "0.4.39"
 clap = { version = "4.5.23", features = ["derive"] }
 colored = "2.2.0"
 confy = "0.6.1"
@@ -16,3 +17,4 @@ serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
 spinners = "4.1.1"
 tokio = { version = "1.42.0", features = ["full"] }
+url = "2.5.4"
