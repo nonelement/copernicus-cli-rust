@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate clap;
 extern crate colored;
 extern crate confy;
@@ -16,7 +17,7 @@ use std::error::Error;
 use dotenv::dotenv;
 use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
-use clap::Parser;
+use clap::{ArgGroup, Command, Parser};
 
 mod api;
 mod util;
@@ -25,6 +26,7 @@ use api::{AuthDetails, Credentials, check_auth, list_imagery};
 use util::format_feature_collection;
 
 const APP_NAME: &str = "COPERNICUS-CLI";
+const COMMAND_NAME: &str = "copernicus";
 const ENV_VAR_USER: &str = "COPERNICUS_USER";
 const ENV_VAR_PASS: &str = "COPERNICUS_PASS";
 
@@ -48,8 +50,10 @@ impl ::std::default::Default for Config {
 #[derive(Parser, Debug)]
 struct Args {
     // A bounding box to search by
-    #[arg(id="bbox", long)]
-    query_bbox_string: String,
+    #[arg(long)]
+    bbox: Option<String>,
+    #[arg(long)]
+    datetime: Option<String>,
 }
 
 fn get_env_creds() -> Credentials {
@@ -59,12 +63,31 @@ fn get_env_creds() -> Credentials {
     }
 }
 
+fn get_args() -> Args {
+    let parsed = Command::new(COMMAND_NAME)
+        .arg(arg!(--bbox <bbox> "provide a bounding box"))
+        .arg(arg!(--datetime <datetime> "filter by datetime"))
+        .group(ArgGroup::new("required.args")
+            .args(["bbox", "datetime"])
+            .required(true)
+            .multiple(true)
+        ).get_matches();
+
+    let args = Args {
+        bbox: parsed.get_one::<String>("bbox").cloned(),
+        datetime: parsed.get_one::<String>("datetime").cloned()
+    };
+
+
+    return args;
+}
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     dotenv().ok();
-    let args = Args::parse();
+    let args = get_args();
 
     let mut config: Config = confy::load(APP_NAME, None)?;
     let credentials = get_env_creds();
@@ -91,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     confy::store(APP_NAME, None, config)?;
 
     let mut s = Spinner::new(Spinners::Dots, "Querying for imagery at bbox...".into());
-    let fc = list_imagery(&client, &auth_details, args.query_bbox_string).await?;
+    let fc = list_imagery(&client, &auth_details, args.bbox.unwrap()).await?;
     s.stop_with_newline();
     println!("features:\n{}", format_feature_collection(&fc));
 

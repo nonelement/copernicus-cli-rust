@@ -124,6 +124,7 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 
 // API Interactions
 
+// TODO: This only supports bbox for now. Implement other args and convert to Options.
 pub async fn list_imagery(client: &Client, auth_details: &AuthDetails, bbox: String) -> Result<FeatureCollection, Box<dyn Error>> {
     let clean_bbox = &bbox[1..bbox.len()-1];
     let url = LIST_URL.replace("<BBOX>", clean_bbox);
