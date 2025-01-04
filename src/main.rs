@@ -1,5 +1,4 @@
 extern crate chrono;
-#[macro_use]
 extern crate clap;
 extern crate colored;
 extern crate confy;
@@ -20,13 +19,15 @@ mod util;
 use std::env::var;
 use std::error::Error;
 
+use chrono::offset::Utc;
+use chrono::DateTime;
 use dotenv::dotenv;
 use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
 use clap::{Arg, ArgGroup, Command, Parser};
 
 use api::{AuthDetails, Credentials, check_auth, list_imagery};
-use util::format_feature_collection;
+use util::{parse_date, format_feature_collection};
 
 const APP_NAME: &str = "COPERNICUS-CLI";
 const COMMAND_NAME: &str = "copernicus";
@@ -56,9 +57,9 @@ struct Args {
     #[arg(long)]
     bbox: Option<String>,
     #[arg(long)]
-    from: Option<String>,
+    from: Option<DateTime<Utc>>,
     #[arg(long)]
-    to: Option<String>,
+    to: Option<DateTime<Utc>>,
     #[arg(long)]
     sortby: Option<String>,
 }
@@ -70,21 +71,30 @@ fn get_env_creds() -> Credentials {
     }
 }
 
+fn parse_arg(arg: Option<String>) -> Result<DateTime<Utc>, Box<dyn Error>> {
+    if let Some(datetime_string) = arg {
+        parse_date(datetime_string)
+    } else {
+        Err("Unable to parse datetime arg.".into())
+    }
+
+}
+
 fn get_args() -> Args {
     // Requires one flag of: bbox, datetime, to, from
     // datetime is exclusive with to and from
-    let parsed = Command::new(COMMAND_NAME)
+    let matched = Command::new(COMMAND_NAME)
         .arg(Arg::new("bbox")
                 .long("bbox")
                 .help("provides a bounding box for the query(top left, bottom right)")
         )
         .arg(Arg::new("from")
                 .long("from")
-                .help("start of range to query by: YYYY-DD-MMTHH:MM:SSZ or YYYY-DD-MM")
+                .help("start of range to query by: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD")
         )
         .arg(Arg::new("to")
                 .long("to")
-                .help("end of range to query by: YYYY-DD-MMTHH:MM:SSZ or YYYY-DD-MM")
+                .help("end of range to query by: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DD")
         )
         .arg(Arg::new("sortby")
                 .long("sortby")
@@ -97,14 +107,12 @@ fn get_args() -> Args {
         )
         .get_matches();
 
-    let args = Args {
-        bbox: parsed.get_one::<String>("bbox").cloned(),
-        from: parsed.get_one::<String>("from").cloned(),
-        to: parsed.get_one::<String>("to").cloned(),
-        sortby: parsed.get_one::<String>("sortby").cloned()
-    };
+    let bbox: Option<String> = matched.get_one::<String>("bbox").cloned();
+    let from = parse_arg(matched.get_one::<String>("from").cloned()).ok();
+    let to = parse_arg(matched.get_one::<String>("to").cloned()).ok();
+    let sortby: Option<String> = matched.get_one::<String>("sortby").cloned();
 
-    return args;
+    return Args { bbox, from, to, sortby, };
 }
 
 

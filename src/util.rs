@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use chrono::offset::Utc;
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDate};
 use colored::Colorize;
 use geojson::{Feature, FeatureCollection};
 use geojson::feature::Id;
@@ -10,9 +10,6 @@ use geojson::JsonObject;
 use geojson::JsonValue;
 use serde_json::map::Map;
 use serde_json::Value;
-
-const DTZ_FORMAT: &'static str = "%Y-%M-%DT%h:%m:%sZ";
-const DZ_FORMAT: &'static str = "%Y-%M-%D";
 
 const STYLES: [(&'static str, &'static str); 9] = [
     ("ID", "White"),
@@ -117,20 +114,22 @@ fn format_with_template(template: &str, data: &HashMap<&str, String>) -> String 
     return compiled.to_string();
 }
 
-// Parsing
-
-pub fn get_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
+pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
     let s = s.as_str();
-    let parsed = DateTime::parse_from_str(s, DTZ_FORMAT);
+    let parsed = DateTime::parse_from_rfc3339(s); // Subset of ISO 8601
     match parsed {
         Ok(dt) => Ok(dt.into()),
         Err(_e) => {
-            let parsed = DateTime::parse_from_str(s, DZ_FORMAT);
+            // Parse a date, then zero out the time and convert to DateTime<Utc>
+            let parsed = NaiveDate::parse_from_str(s, "%F");
             if let Ok(dt) = parsed {
-                Ok(dt.into())
+                Ok(dt.and_hms_opt(0,0,0).unwrap().and_utc())
             } else {
                 Err(format!("Unable to parse: {}", s).into())
             }
         }
     }
 }
+
+
+

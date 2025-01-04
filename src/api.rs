@@ -3,6 +3,7 @@ use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::offset::Utc;
+use chrono::{DateTime, SecondsFormat::Secs};
 use geojson::FeatureCollection;
 use log::info;
 use reqwest::{Client, Response};
@@ -131,8 +132,8 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 //  bbox=-80.673805,-0.52849,-78.060341,1.689651&datetime=2014-10-13T23:28:54.650Z
 fn parse_options(
     bbox_opt: Option<String>,
-    from_opt: Option<String>,
-    to_opt: Option<String>,
+    from_opt: Option<DateTime<Utc>>,
+    to_opt: Option<DateTime<Utc>>,
     sortby_opt: Option<String>
 ) -> Option<String> {
     let mut options: Vec<String> = Vec::new();
@@ -144,8 +145,8 @@ fn parse_options(
     if from_opt.is_some() || to_opt.is_some() {
         options.push(format!(
             "datetime={}/{}",
-            from_opt.unwrap_or(String::from("")),
-            to_opt.unwrap_or(String::from(""))
+            if let Some(from) = from_opt { from.to_rfc3339_opts(Secs, true) } else { String::from("") },
+            if let Some(to) = to_opt { to.to_rfc3339_opts(Secs, true) } else { String::from("") }
         ));
     }
 
@@ -167,8 +168,8 @@ pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
     bbox: Option<String>,
-    from: Option<String>,
-    to: Option<String>,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
     sortby: Option<String>
 ) -> Result<FeatureCollection, Box<dyn Error>> {
     let mut url: Url = Url::parse(LIST_URL)?;
