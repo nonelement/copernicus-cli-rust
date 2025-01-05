@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::From;
 use std::error::Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -9,6 +10,8 @@ use log::info;
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
 use url::Url;
+
+use crate::Args;
 
 pub struct Credentials {
     pub user: Option<String>,
@@ -126,32 +129,61 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 }
 
 // API Interactions
+// TODO: implement search endpoint to search multiple catalogues?
+//  e.g. Sentinel-1, Sentinel-2, Sentinel-3, etc.
+
+pub struct ListParams {
+    pub id: Option<String>,
+    pub bbox: Option<String>,
+    pub from: Option<DateTime<Utc>>,
+    pub to: Option<DateTime<Utc>>,
+    pub sortby: Option<String>,
+    pub limit: Option<u16>,
+    pub page: Option<u16>,
+}
+
+impl From<Args> for ListParams {
+    fn from(a: Args) -> Self {
+        match a {
+            Args { id, bbox, from, to, sortby, limit, page } => ListParams { id, bbox, from, to, sortby, limit, page },
+        }
+    }
+}
 
 // Matches interface provided by Url.set_query
 // Example: https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items? /
 //  bbox=-80.673805,-0.52849,-78.060341,1.689651&datetime=2014-10-13T23:28:54.650Z
-fn parse_options(
-    bbox_opt: Option<String>,
-    from_opt: Option<DateTime<Utc>>,
-    to_opt: Option<DateTime<Utc>>,
-    sortby_opt: Option<String>
+fn generate_query(
+    list_params: ListParams
 ) -> Option<String> {
     let mut options: Vec<String> = Vec::new();
 
-    if let Some(bbox) = bbox_opt {
+    if let Some(id) = list_params.id {
+        options.push(format!("ids={}", id));
+    }
+
+    if let Some(bbox) = list_params.bbox {
         options.push(format!("bbox={}", bbox));
     }
 
-    if from_opt.is_some() || to_opt.is_some() {
+    if list_params.from.is_some() || list_params.to.is_some() {
         options.push(format!(
             "datetime={}/{}",
-            if let Some(from) = from_opt { from.to_rfc3339_opts(Secs, true) } else { String::from("") },
-            if let Some(to) = to_opt { to.to_rfc3339_opts(Secs, true) } else { String::from("") }
+            if let Some(from) = list_params.from { from.to_rfc3339_opts(Secs, true) } else { String::from("") },
+            if let Some(to) = list_params.to { to.to_rfc3339_opts(Secs, true) } else { String::from("") }
         ));
     }
 
-    if let Some(sortby) = sortby_opt {
+    if let Some(sortby) = list_params.sortby {
         options.push(format!("sortby={}", sortby));
+    }
+
+    if let Some(limit) = list_params.limit {
+        options.push(format!("limit={}", limit));
+    }
+
+    if let Some(page) = list_params.page {
+        options.push(format!("page={}", page));
     }
 
     if options.len() > 0 {
@@ -163,17 +195,13 @@ fn parse_options(
 
 // TODO:
 //  add id, limit, page params too.
-//  encapsulate options here too, somehow
 pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
-    bbox: Option<String>,
-    from: Option<DateTime<Utc>>,
-    to: Option<DateTime<Utc>>,
-    sortby: Option<String>
+    list_params: ListParams,
 ) -> Result<FeatureCollection, Box<dyn Error>> {
     let mut url: Url = Url::parse(LIST_URL)?;
-    let query_params = parse_options(bbox, from, to, sortby);
+    let query_params = generate_query(list_params);
     url.set_query(query_params.as_deref());
 
     info!("API::list_imagery: Requesting {}...", url);

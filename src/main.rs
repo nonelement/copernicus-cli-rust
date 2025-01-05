@@ -24,7 +24,7 @@ use chrono::DateTime;
 use dotenv::dotenv;
 use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
-use clap::{Arg, ArgGroup, Command, Parser};
+use clap::{Arg, ArgGroup, Command};
 
 use api::{AuthDetails, Credentials, check_auth, list_imagery};
 use util::{parse_date, format_feature_collection};
@@ -51,17 +51,15 @@ impl ::std::default::Default for Config {
 }
 
 // A cli app to search for copernicus data
-#[derive(Parser, Debug)]
+#[derive(Debug)]
 struct Args {
-    // A bounding box to search by
-    #[arg(long)]
+    id: Option<String>,
     bbox: Option<String>,
-    #[arg(long)]
     from: Option<DateTime<Utc>>,
-    #[arg(long)]
     to: Option<DateTime<Utc>>,
-    #[arg(long)]
     sortby: Option<String>,
+    page: Option<u16>,
+    limit: Option<u16>
 }
 
 fn get_env_creds() -> Credentials {
@@ -71,7 +69,7 @@ fn get_env_creds() -> Credentials {
     }
 }
 
-fn parse_arg(arg: Option<String>) -> Result<DateTime<Utc>, Box<dyn Error>> {
+fn parse_datetime(arg: Option<String>) -> Result<DateTime<Utc>, Box<dyn Error>> {
     if let Some(datetime_string) = arg {
         parse_date(datetime_string)
     } else {
@@ -80,10 +78,25 @@ fn parse_arg(arg: Option<String>) -> Result<DateTime<Utc>, Box<dyn Error>> {
 
 }
 
+fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
+    if let Some(u16_string) = arg {
+        match u16_string.parse::<u16>() {
+            Ok(v) => Ok(v),
+            Err(_) => Err("Unable to parse u16 value.".into())
+        }
+    } else {
+        Err("Unable to parse u16 value.".into())
+    }
+}
+
 fn get_args() -> Args {
     // Requires one flag of: bbox, datetime, to, from
     // datetime is exclusive with to and from
     let matched = Command::new(COMMAND_NAME)
+        .arg(Arg::new("id")
+                .long("id")
+                .help("id to search for")
+        )
         .arg(Arg::new("bbox")
                 .long("bbox")
                 .help("provides a bounding box for the query(top left, bottom right)")
@@ -100,19 +113,30 @@ fn get_args() -> Args {
                 .long("sortby")
                 .help("sort query results by direction, field. [+|-][start_datetime | end_datetime | datetime]")
         )
+        .arg(Arg::new("limit")
+                .long("limit")
+                .help("limit on the number of items returned")
+        )
+        .arg(Arg::new("page")
+                .long("page")
+                .help("provides the page number to retrieve for paginated responses")
+        )
         .group(ArgGroup::new("required.args")
-            .args(["bbox", "from", "to", "sortby"])
+            .args(["id", "bbox", "from", "to"])
             .required(true)
             .multiple(true)
         )
         .get_matches();
 
-    let bbox: Option<String> = matched.get_one::<String>("bbox").cloned();
-    let from = parse_arg(matched.get_one::<String>("from").cloned()).ok();
-    let to = parse_arg(matched.get_one::<String>("to").cloned()).ok();
-    let sortby: Option<String> = matched.get_one::<String>("sortby").cloned();
+    let id = matched.get_one::<String>("id").cloned();
+    let bbox = matched.get_one::<String>("bbox").cloned();
+    let from = parse_datetime(matched.get_one::<String>("from").cloned()).ok();
+    let to = parse_datetime(matched.get_one::<String>("to").cloned()).ok();
+    let sortby = matched.get_one::<String>("sortby").cloned();
+    let limit = parse_u16(matched.get_one::<String>("limit").cloned()).ok();
+    let page = parse_u16(matched.get_one::<String>("page").cloned()).ok();
 
-    return Args { bbox, from, to, sortby, };
+    return Args { id, bbox, from, to, sortby, limit, page };
 }
 
 
@@ -147,7 +171,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     confy::store(APP_NAME, None, config)?;
 
     let mut s = Spinner::new(Spinners::Dots, "Querying for imagery at bbox...".into());
-    let fc = list_imagery(&client, &auth_details, args.bbox, args.from, args.to, args.sortby).await?;
+    let fc = list_imagery(&client, &auth_details, args.into()).await?;
     s.stop_with_newline();
     println!("features:\n{}", format_feature_collection(&fc));
 
