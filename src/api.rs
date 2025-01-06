@@ -21,7 +21,7 @@ pub struct Credentials {
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 // GET
-const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-2/items";
+const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/{}/items";
 
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -132,6 +132,15 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 // TODO: implement search endpoint to search multiple catalogues?
 //  e.g. Sentinel-1, Sentinel-2, Sentinel-3, etc.
 
+fn with_collection(url: &'static str, collection: &str) -> Result<String, Box<dyn Error>> {
+    // Can be used as a template
+    if url.contains("{}") {
+        Ok(url.replace("{}", collection))
+    } else {
+        Err("Unable to use provided url as a template.".into())
+    }
+}
+
 pub struct ListParams {
     pub id: Option<String>,
     pub bbox: Option<String>,
@@ -193,14 +202,12 @@ fn generate_query(
     }
 }
 
-// TODO:
-//  add id, limit, page params too.
 pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
     list_params: ListParams,
 ) -> Result<FeatureCollection, Box<dyn Error>> {
-    let mut url: Url = Url::parse(LIST_URL)?;
+    let mut url: Url = Url::parse(&with_collection(LIST_URL, "SENTINEL-2")?)?;
     let query_params = generate_query(list_params);
     url.set_query(query_params.as_deref());
 
@@ -209,6 +216,7 @@ pub async fn list_imagery(
         .get(url)
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
+    info!("API::list_imagery: Response: \n{}", response_text);
     return Ok(serde_json::from_str::<FeatureCollection>(&response_text)?);
 }
 

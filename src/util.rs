@@ -84,7 +84,12 @@ pub fn format_feature(f: &Feature) -> String {
     let short_name: String = String::from(properties["platformShortName"].as_str().unwrap());
     let serial_identifier: String = String::from(properties["platformSerialIdentifier"].as_str().unwrap());
     let product_type: String = String::from(properties["productType"].as_str().unwrap());
-    let cloud_cover: String = properties["cloudCover"].as_f64().unwrap().to_string();
+    // Sentinel-2 Value
+    let cloud_cover: String = if let Some(v) = properties.get("cloudCover") {
+        v.as_f64().unwrap().to_string()
+    } else {
+        String::from("N/A")
+    };
     let capture_time: String = String::from(properties["datetime"].as_str().unwrap());
     let quicklook_href: String = String::from(get_value(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members).as_str().unwrap());
     let product_href: String = String::from(get_value(vec!["assets", "PRODUCT", "href"], &f.foreign_members).as_str().unwrap());
