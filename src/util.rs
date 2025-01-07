@@ -11,7 +11,7 @@ use geojson::JsonValue;
 use serde_json::map::Map;
 use serde_json::Value;
 
-const STYLES: [(&'static str, &'static str); 9] = [
+const STYLES: [(&str, &str); 9] = [
     ("ID", "White"),
     ("SHORT_NAME", "White"),
     ("SERIAL", "White"),
@@ -59,40 +59,66 @@ pub fn format_feature_collection(fc: &FeatureCollection) -> String {
     for feature in fc.features.clone() {
         output.push(format_feature(&feature));
     }
-    return output.join("\n");
+    output.join("\n")
 }
 
-fn get_value(path: Vec<&str>, m: &Option<JsonObject>) -> JsonValue {
-    let mut v: &JsonObject = if let Some(v) = m { v } else { return JsonValue::Null };
-    let mut t: JsonValue = Value::Null;
+fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
+    let mut v: &JsonObject = if let Some(v) = m { v } else { return None };
+    let mut t: Option<JsonValue> = Some(Value::Null);
     for name in path {
-        let _v: &JsonValue = &v[name];
+        let _v: &Value = if let Some(name) = &v.get(name) { name } else { return None };
         match _v {
-            serde_json::Value::Object(obj) => v = &obj,
-            other => t = other.clone(),
+            serde_json::Value::Object(obj) => v = obj,
+            other => t = Some(other.clone()),
         }
     }
-    return t;
+    t
+}
+
+fn get_id(id: &Option<Id>) -> Option<String> {
+    match id {
+        Some(Id::String(v)) => Some(v.clone()),
+        Some(Id::Number(n)) => Some(n.to_string()),
+        None => None
+    }
+}
+
+fn get_value(value_opt: Option<Value>) -> Option<String> {
+    if let Some(value) = value_opt {
+        match value {
+            Value::String(v) => Some(v.to_string()),
+            Value::Number(v) => Some(v.to_string()),
+            Value::Bool(v) => Some(v.to_string()),
+            // Vec<Value> type. Lightly recurse to get leaf values.
+            Value::Array(v) => Some(
+                v.iter().map(|subv|
+                    get_value(Some(subv.clone())
+                ).unwrap()) // Unwrapping, but this always returns Option<String>
+                .collect::<Vec<String>>()
+                .join(", ")
+            ),
+            // Possibly object type or Null. Short circuit with "N/A" for now.
+            _ => Some(String::from("N/A")),
+        }
+    } else {
+        Some(String::from("N/A"))
+    }
 }
 
 pub fn format_feature(f: &Feature) -> String {
     // Top level feature attributes
-    let id = match &f.id { Some(Id::String(v)) => v.clone(), Some(Id::Number(n)) => n.to_string(), None => String::new() };
-    let bbox = f.bbox.clone().unwrap_or(vec![]).iter().map(|&v| v.to_string()).collect::<Vec<String>>().join(",");
+    let id = get_id(&f.id);
+    let bbox = Some(f.bbox.clone().unwrap_or_default().iter().map(|&v| v.to_string()).collect::<Vec<String>>().join(","));
     // Feature properties:
-    let ref properties = if let Some(properties) = &f.properties { properties } else { &Map::new() };
-    let short_name: String = String::from(properties["platformShortName"].as_str().unwrap());
-    let serial_identifier: String = String::from(properties["platformSerialIdentifier"].as_str().unwrap());
-    let product_type: String = String::from(properties["productType"].as_str().unwrap());
+    let properties = if let Some(properties) = &f.properties { properties } else { &Map::new() };
+    let short_name: Option<String> = get_value(properties.get("platformShortName").cloned());
+    let serial_identifier: Option<String> = get_value(properties.get("platformSerialIdentifier").cloned());
+    let product_type: Option<String> = get_value(properties.get("productType").cloned());
     // Sentinel-2 Value
-    let cloud_cover: String = if let Some(v) = properties.get("cloudCover") {
-        v.as_f64().unwrap().to_string()
-    } else {
-        String::from("N/A")
-    };
-    let capture_time: String = String::from(properties["datetime"].as_str().unwrap());
-    let quicklook_href: String = String::from(get_value(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members).as_str().unwrap());
-    let product_href: String = String::from(get_value(vec!["assets", "PRODUCT", "href"], &f.foreign_members).as_str().unwrap());
+    let cloud_cover: Option<String> = get_value(properties.get("cloudCover").cloned());
+    let capture_time: Option<String> = get_value(properties.get("datetime").cloned());
+    let quicklook_href: Option<String> = get_value(from_path(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members));
+    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &f.foreign_members));
     let data = HashMap::from([
         ("ID", id),
         ("SHORT_NAME", short_name),
@@ -104,19 +130,20 @@ pub fn format_feature(f: &Feature) -> String {
         ("QUICKLOOK_HREF", quicklook_href),
         ("PRODUCT_HREF", product_href)
     ]);
-    return format_with_template(FEATURE_DETAILS_FORMAT, &data);
+    format_with_template(FEATURE_DETAILS_FORMAT, &data)
 }
 
 // Try this with pure accessor methods and the template at the top
-fn format_with_template(template: &str, data: &HashMap<&str, String>) -> String {
+fn format_with_template(template: &str, data: &HashMap<&str, Option<String>>) -> String {
     let mut compiled = String::from(template).truecolor(64, 64, 64).to_string();
     let styles = HashMap::from(STYLES);
-    for (k, v) in data {
+    for (k, mv) in data {
+        let v = if let Some(v) = mv { v } else { &String::from("N/A") };
         let tag = format!("<{}>", k);
-        let value = style_value(&k, v.clone(), &styles);
+        let value = style_value(k, v.clone(), &styles);
         compiled = compiled.replace(&tag, &value);
     }
-    return compiled.to_string();
+    compiled.to_string()
 }
 
 pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {

@@ -64,7 +64,7 @@ pub async fn check_auth(auth_details: Option<AuthDetails>, credentials: &Credent
     match auth_details {
         None => {
             // Acquire auth
-            return Ok(authenticate_credentials(credentials).await?)
+            authenticate_credentials(credentials).await
         },
         Some(auth_details) => {
             match get_auth_state(&auth_details) {
@@ -98,10 +98,10 @@ async fn authenticate(form_body: &HashMap<&str, String>) -> Result<AuthDetails, 
         let body = response.text().await.unwrap();
         let mut auth_details: AuthDetails = serde_json::from_str(&body)?;
         auth_details.acquired_time = Utc::now().timestamp();
-        return Ok(auth_details);
+        Ok(auth_details)
     } else {
         // Debug ok here, since this is effectively a stop error
-        return Err(format!("authentication response was abnormal: {:?}", response).into());
+        Err(format!("authentication response was abnormal: {:?}", response).into())
     }
 }
 
@@ -116,16 +116,16 @@ pub async fn authenticate_credentials(credentials: &Credentials) -> Result<AuthD
     } else {
         HashMap::new()
     };
-    Ok(authenticate(&form_body).await?)
+    authenticate(&form_body).await
 }
 
 pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDetails, Box<dyn Error>> {
     let form_body = HashMap::from([
         ("client_id", String::from("cdse-public")),
         ("grant_type", String::from("refresh_token")),
-        ("refresh_token", String::from(auth_details.refresh_token.clone())),
+        ("refresh_token", auth_details.refresh_token.clone()),
     ]);
-    Ok(authenticate(&form_body).await?)
+    authenticate(&form_body).await
 }
 
 // API Interactions
@@ -153,9 +153,8 @@ pub struct ListParams {
 
 impl From<Args> for ListParams {
     fn from(a: Args) -> Self {
-        match a {
-            Args { id, bbox, from, to, sortby, limit, page } => ListParams { id, bbox, from, to, sortby, limit, page },
-        }
+        let Args { id, bbox, from, to, sortby, limit, page } = a;
+        ListParams { id, bbox, from, to, sortby, limit, page }
     }
 }
 
@@ -195,7 +194,7 @@ fn generate_query(
         options.push(format!("page={}", page));
     }
 
-    if options.len() > 0 {
+    if !options.is_empty() {
         Some(options.join("&"))
     } else {
         None
@@ -217,6 +216,6 @@ pub async fn list_imagery(
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
     info!("API::list_imagery: Response: \n{}", response_text);
-    return Ok(serde_json::from_str::<FeatureCollection>(&response_text)?);
+    Ok(serde_json::from_str::<FeatureCollection>(&response_text)?)
 }
 
