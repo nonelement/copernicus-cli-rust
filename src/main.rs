@@ -54,6 +54,7 @@ impl ::std::default::Default for Config {
 #[derive(Debug)]
 struct Args {
     id: Option<String>,
+    collection: String,
     bbox: Option<String>,
     from: Option<DateTime<Utc>>,
     to: Option<DateTime<Utc>>,
@@ -97,6 +98,10 @@ fn get_args() -> Args {
                 .long("id")
                 .help("id to search for")
         )
+        .arg(Arg::new("collection")
+            .long("collection")
+            .help("specify which collection to query. Default: SENTINEL-2")
+        )
         .arg(Arg::new("bbox")
                 .long("bbox")
                 .help("provides a bounding box for the query(top left, bottom right)")
@@ -128,6 +133,10 @@ fn get_args() -> Args {
         )
         .get_matches();
 
+    // Settings w defaults
+    let collection = matched.get_one::<String>("collection").cloned()
+        .unwrap_or(String::from("SENTINEL-2"));
+    // Options
     let id = matched.get_one::<String>("id").cloned();
     let bbox = matched.get_one::<String>("bbox").cloned();
     let from = parse_datetime(matched.get_one::<String>("from").cloned()).ok();
@@ -136,7 +145,7 @@ fn get_args() -> Args {
     let limit = parse_u16(matched.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(matched.get_one::<String>("page").cloned()).ok();
 
-    return Args { id, bbox, from, to, sortby, limit, page };
+    Args { id, collection, bbox, from, to, sortby, limit, page }
 }
 
 

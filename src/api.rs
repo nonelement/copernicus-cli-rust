@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::offset::Utc;
 use chrono::{DateTime, SecondsFormat::Secs};
 use geojson::FeatureCollection;
-use log::info;
+use log::{info, error};
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
 use url::Url;
@@ -143,6 +143,7 @@ fn with_collection(url: &'static str, collection: &str) -> Result<String, Box<dy
 
 pub struct ListParams {
     pub id: Option<String>,
+    pub collection: String,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
@@ -153,8 +154,8 @@ pub struct ListParams {
 
 impl From<Args> for ListParams {
     fn from(a: Args) -> Self {
-        let Args { id, bbox, from, to, sortby, limit, page } = a;
-        ListParams { id, bbox, from, to, sortby, limit, page }
+        let Args { id, collection, bbox, from, to, sortby, limit, page } = a;
+        ListParams { id, collection, bbox, from, to, sortby, limit, page }
     }
 }
 
@@ -206,7 +207,7 @@ pub async fn list_imagery(
     auth_details: &AuthDetails,
     list_params: ListParams,
 ) -> Result<FeatureCollection, Box<dyn Error>> {
-    let mut url: Url = Url::parse(&with_collection(LIST_URL, "SENTINEL-2")?)?;
+    let mut url: Url = Url::parse(&with_collection(LIST_URL, &list_params.collection)?)?;
     let query_params = generate_query(list_params);
     url.set_query(query_params.as_deref());
 
@@ -216,6 +217,13 @@ pub async fn list_imagery(
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
     info!("API::list_imagery: Response: \n{}", response_text);
-    Ok(serde_json::from_str::<FeatureCollection>(&response_text)?)
+    let maybe_fc = serde_json::from_str::<FeatureCollection>(&response_text);
+    match maybe_fc {
+        Ok(fc) => Ok(fc),
+        Err(e) => {
+            error!("Unable to deserialize response: {}.\nResponse:{}", e, response_text);
+            Err(Box::new(e))
+        }
+    }
 }
 
