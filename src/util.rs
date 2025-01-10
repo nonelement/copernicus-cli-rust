@@ -8,9 +8,11 @@ use geojson::{Feature, FeatureCollection};
 use geojson::feature::Id;
 use geojson::JsonObject;
 use geojson::JsonValue;
-use serde_json::map::Map;
+use serde_json::Map;
 use serde_json::Value;
 
+
+// Some settings to highlight certain data in a formatted feature
 const STYLES: [(&str, &str); 9] = [
     ("ID", "White"),
     ("SHORT_NAME", "White"),
@@ -23,7 +25,8 @@ const STYLES: [(&str, &str); 9] = [
     ("PRODUCT_HREF", "White"),
 ];
 
-
+// Singular template to use for listing features
+// TODO: Use different templates for different types of features
 const FEATURE_DETAILS_FORMAT: &str = r#"
 <ID> (<SHORT_NAME>.<SERIAL>/<DETAIL>)
   <CAPTURE_TIME> cloudy: <CLOUD_COVER>
@@ -32,6 +35,7 @@ const FEATURE_DETAILS_FORMAT: &str = r#"
   archive: <PRODUCT_HREF>
 "#;
 
+// Maps some color words to function calls to apply settings
 fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
     let style = styles.get(k);
     match style {
@@ -54,14 +58,7 @@ fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
     }
 }
 
-pub fn format_feature_collection(fc: &FeatureCollection) -> String {
-    let mut output: Vec<String> = Vec::new();
-    for feature in fc.features.clone() {
-        output.push(format_feature(&feature));
-    }
-    output.join("\n")
-}
-
+// Path into a geojson::JsonObject to retrieve a nested value
 fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
     let mut v: &JsonObject = if let Some(v) = m { v } else { return None };
     let mut t: Option<JsonValue> = Some(Value::Null);
@@ -75,6 +72,7 @@ fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
     t
 }
 
+// Converts feature ids to a string here for display.
 fn get_id(id: &Option<Id>) -> Option<String> {
     match id {
         Some(Id::String(v)) => Some(v.clone()),
@@ -83,6 +81,7 @@ fn get_id(id: &Option<Id>) -> Option<String> {
     }
 }
 
+// Unwraps serde_json::Value and converts it to a string for display
 fn get_value(value_opt: Option<Value>) -> Option<String> {
     if let Some(value) = value_opt {
         match value {
@@ -105,47 +104,6 @@ fn get_value(value_opt: Option<Value>) -> Option<String> {
     }
 }
 
-pub fn format_feature(f: &Feature) -> String {
-    // Top level feature attributes
-    let id = get_id(&f.id);
-    let bbox = Some(f.bbox.clone().unwrap_or_default().iter().map(|&v| v.to_string()).collect::<Vec<String>>().join(","));
-    // Feature properties:
-    let properties = if let Some(properties) = &f.properties { properties } else { &Map::new() };
-    let short_name: Option<String> = get_value(properties.get("platformShortName").cloned());
-    let serial_identifier: Option<String> = get_value(properties.get("platformSerialIdentifier").cloned());
-    let product_type: Option<String> = get_value(properties.get("productType").cloned());
-    // Sentinel-2 Value
-    let cloud_cover: Option<String> = get_value(properties.get("cloudCover").cloned());
-    let capture_time: Option<String> = get_value(properties.get("datetime").cloned());
-    let quicklook_href: Option<String> = get_value(from_path(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members));
-    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &f.foreign_members));
-    let data = HashMap::from([
-        ("ID", id),
-        ("SHORT_NAME", short_name),
-        ("SERIAL", serial_identifier),
-        ("DETAIL", product_type),
-        ("CAPTURE_TIME", capture_time),
-        ("CLOUD_COVER", cloud_cover),
-        ("BBOX", bbox),
-        ("QUICKLOOK_HREF", quicklook_href),
-        ("PRODUCT_HREF", product_href)
-    ]);
-    format_with_template(FEATURE_DETAILS_FORMAT, &data)
-}
-
-// Try this with pure accessor methods and the template at the top
-fn format_with_template(template: &str, data: &HashMap<&str, Option<String>>) -> String {
-    let mut compiled = String::from(template).truecolor(64, 64, 64).to_string();
-    let styles = HashMap::from(STYLES);
-    for (k, mv) in data {
-        let v = if let Some(v) = mv { v } else { &String::from("N/A") };
-        let tag = format!("<{}>", k);
-        let value = style_value(k, v.clone(), &styles);
-        compiled = compiled.replace(&tag, &value);
-    }
-    compiled.to_string()
-}
-
 pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
     let s = s.as_str();
     let parsed = DateTime::parse_from_rfc3339(s); // Subset of ISO 8601
@@ -163,5 +121,54 @@ pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
     }
 }
 
+// Display methods
 
+pub fn format_feature_collection(fc: &FeatureCollection) -> String {
+    let mut output: Vec<String> = Vec::new();
+    for feature in fc.features.clone() {
+        output.push(format_feature(&feature));
+    }
+    output.join("\n")
+}
+
+pub fn format_feature(f: &Feature) -> String {
+    // Top level feature attributes
+    let id = get_id(&f.id);
+    let bbox = Some(f.bbox.clone().unwrap_or_default().iter().map(|&v| v.to_string()).collect::<Vec<String>>().join(","));
+    // Feature properties:
+    let properties = if let Some(properties) = &f.properties { properties } else { &Map::new() };
+    let short_name: Option<String> = get_value(properties.get("platformShortName").cloned());
+    let serial_identifier: Option<String> = get_value(properties.get("platformSerialIdentifier").cloned());
+    let product_type: Option<String> = get_value(properties.get("productType").cloned());
+    let capture_time: Option<String> = get_value(properties.get("datetime").cloned());
+    // Atmospheric values
+    let cloud_cover: Option<String> = get_value(properties.get("cloudCover").cloned());
+    // Product links
+    let quicklook_href: Option<String> = get_value(from_path(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members));
+    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &f.foreign_members));
+    let data = HashMap::from([
+        ("ID", id),
+        ("SHORT_NAME", short_name),
+        ("SERIAL", serial_identifier),
+        ("DETAIL", product_type),
+        ("CAPTURE_TIME", capture_time),
+        ("CLOUD_COVER", cloud_cover),
+        ("BBOX", bbox),
+        ("QUICKLOOK_HREF", quicklook_href),
+        ("PRODUCT_HREF", product_href)
+    ]);
+    format_with_template(FEATURE_DETAILS_FORMAT, &data)
+}
+
+fn format_with_template(template: &str, data: &HashMap<&str, Option<String>>) -> String {
+    let mut compiled = String::from(template).truecolor(64, 64, 64).to_string();
+    let styles = HashMap::from(STYLES);
+    for (k, mv) in data {
+        let v = if let Some(v) = mv { v } else { &String::from("N/A") };
+        let tag = format!("<{}>", k);
+        let value = style_value(k, v.clone(), &styles);
+        compiled = compiled.replace(&tag, &value);
+    }
+    compiled.to_string()
+}
 

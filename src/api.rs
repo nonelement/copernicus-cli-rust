@@ -13,6 +13,7 @@ use url::Url;
 
 use crate::Args;
 
+// Related to both CLI ENV and Auth interactions
 pub struct Credentials {
     pub user: Option<String>,
     pub pass: Option<String>
@@ -23,7 +24,7 @@ const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDS
 // GET
 const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/{}/items";
 
-
+// Core auth struct. Gets saved and updated each run with new information.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AuthDetails {
     #[serde(default)]
@@ -39,6 +40,7 @@ pub struct AuthDetails {
     pub scope: String
 }
 
+// Internal to Api, Auth code, which helps us reason about auth state.
 enum AuthState {
     IsOK,
     NeedsRefresh,
@@ -141,6 +143,7 @@ fn with_collection(url: &'static str, collection: &str) -> Result<String, Box<dy
     }
 }
 
+// Params for list endpoint. Most can be used together to filter results.
 pub struct ListParams {
     pub id: Option<String>,
     pub collection: String,
@@ -159,9 +162,8 @@ impl From<Args> for ListParams {
     }
 }
 
-// Matches interface provided by Url.set_query
-// Example: https://catalogue.dataspace.copernicus.eu/stac/collections/SENTINEL-1/items? /
-//  bbox=-80.673805,-0.52849,-78.060341,1.689651&datetime=2014-10-13T23:28:54.650Z
+// Generates query params from ListParams
+// Return value matches interface provided by Url.set_query
 fn generate_query(
     list_params: ListParams
 ) -> Option<String> {
@@ -202,6 +204,7 @@ fn generate_query(
     }
 }
 
+// Queries for imagery that satisfies constraints
 pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
