@@ -11,13 +11,8 @@ use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
 use url::Url;
 
-use crate::Args;
-
-// Related to both CLI ENV and Auth interactions
-pub struct Credentials {
-    pub user: Option<String>,
-    pub pass: Option<String>
-}
+use crate::Credentials;
+use crate::args::Args;
 
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
@@ -131,22 +126,11 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 }
 
 // API Interactions
-// TODO: implement search endpoint to search multiple catalogues?
-//  e.g. Sentinel-1, Sentinel-2, Sentinel-3, etc.
-
-fn with_collection(url: &'static str, collection: &str) -> Result<String, Box<dyn Error>> {
-    // Can be used as a template
-    if url.contains("{}") {
-        Ok(url.replace("{}", collection))
-    } else {
-        Err("Unable to use provided url as a template.".into())
-    }
-}
 
 // Params for list endpoint. Most can be used together to filter results.
 pub struct ListParams {
     pub id: Option<String>,
-    pub collection: String,
+    pub collection: Option<String>,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
@@ -201,6 +185,19 @@ fn generate_query(
         Some(options.join("&"))
     } else {
         None
+    }
+}
+
+fn with_collection(url: &'static str, collection: &Option<String>) -> Result<String, Box<dyn Error>> {
+    // Can be used as a template
+    if let Some(collection_id) = collection {
+        if url.contains("{}") {
+            Ok(url.replace("{}", collection_id))
+        } else {
+            Err("Unable to use provided url as a template.".into())
+        }
+    } else {
+        Err("No collection provided.".into())
     }
 }
 
