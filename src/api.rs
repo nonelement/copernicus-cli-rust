@@ -232,6 +232,7 @@ pub struct DownloadParams {
     destination: String,
 }
 
+// URL example: https://catalogue.dataspace.copernicus.eu/odata/v1/Products(56db10b0-ede4-4332-a110-2a6ae003048a)/$value
 pub async fn download_imagery(
     client: &Client,
     auth_details: &AuthDetails,

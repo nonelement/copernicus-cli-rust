@@ -113,7 +113,7 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             // Options
             let mut args = get_standard_args(&am);
             // Settings w defaults
-            //args.intent = ModeIntent::List;
+            args.intent = ModeIntent::List;
             args.collection = am.get_one::<String>("collection").cloned()
                 .or(Some(collection_default));
             Ok(args)
