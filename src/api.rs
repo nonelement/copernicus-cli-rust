@@ -129,7 +129,7 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 
 // Params for list endpoint. Most can be used together to filter results.
 pub struct ListParams {
-    pub id: Option<String>,
+    pub ids: Option<String>,
     pub collection: Option<String>,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
@@ -141,8 +141,8 @@ pub struct ListParams {
 
 impl From<Args> for ListParams {
     fn from(a: Args) -> Self {
-        let Args { id, collection, bbox, from, to, sortby, limit, page } = a;
-        ListParams { id, collection, bbox, from, to, sortby, limit, page }
+        let Args { ids, collection, bbox, from, to, sortby, limit, page } = a;
+        ListParams { ids, collection, bbox, from, to, sortby, limit, page }
     }
 }
 
@@ -153,8 +153,8 @@ fn generate_query(
 ) -> Option<String> {
     let mut options: Vec<String> = Vec::new();
 
-    if let Some(id) = list_params.id {
-        options.push(format!("ids={}", id));
+    if let Some(ids) = list_params.ids {
+        options.push(format!("ids={}", ids));
     }
 
     if let Some(bbox) = list_params.bbox {

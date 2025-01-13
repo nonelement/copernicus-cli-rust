@@ -12,7 +12,7 @@ const COMMAND_NAME: &str = "copernicus";
 
 #[derive(Debug)]
 pub struct Args {
-    pub id: Option<String>,
+    pub ids: Option<String>,
     pub collection: Option<String>,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
@@ -57,7 +57,7 @@ fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
 fn get_standard_args(m: &ArgMatches) -> Args {
     let collection = None;
     // Options
-    let id = m.get_one::<String>("id").cloned();
+    let ids = m.get_one::<String>("ids").cloned();
     let bbox = m.get_one::<String>("bbox").cloned();
     let from = parse_datetime(m.get_one::<String>("from").cloned()).ok();
     let to = parse_datetime(m.get_one::<String>("to").cloned()).ok();
@@ -65,7 +65,7 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     let limit = parse_u16(m.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(m.get_one::<String>("page").cloned()).ok();
 
-    Args { id, collection, bbox, from, to, sortby, limit, page }
+    Args { ids, collection, bbox, from, to, sortby, limit, page }
 }
 
 // Extracts arguments from clap::ArgMatches for each subcommand.
@@ -96,8 +96,8 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
 
 // Applies common filter arguments to a command, since these'll .
 fn apply_filter_args(c: Command) -> Command {
-    c.arg(Arg::new("id")
-            .long("id")
+    c.arg(Arg::new("ids")
+            .long("ids")
             .help("id to search for")
     )
     .arg(Arg::new("bbox")
@@ -137,6 +137,13 @@ pub fn get_args() -> Args {
                     .help("specify which collection to query. Default: SENTINEL-2")
                 )
         )
+        .subcommand(
+            Command::new("download")
+                .arg(Arg::new("ids")
+                    .long("ids")
+                    .help("specify which products to download")
+                )
+        )
         // TODO duplicate for compatibility with subcommandless invocation
         .arg(Arg::new("collection")
             .long("collection")
@@ -151,7 +158,7 @@ pub fn get_args() -> Args {
         Err(e) => {
             error!("Unable to parse arguments: {e}");
             Args {
-                id: None,
+                ids: None,
                 collection: None,
                 bbox: None,
                 from: None,
