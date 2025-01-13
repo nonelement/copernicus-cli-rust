@@ -21,10 +21,11 @@ use std::env::var;
 use std::error::Error;
 
 use dotenv::dotenv;
+use log::info;
 use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
 
-use args::get_args;
+use args::{ModeIntent, get_args};
 use api::{AuthDetails, check_auth, list_imagery};
 use util::format_feature_collection;
 
@@ -83,19 +84,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let client = reqwest::Client::new();
 
-    let mut s = Spinner::new(Spinners::Dots, "Checking auth...".into());
+    info!("Checking auth...");
     let auth_details = check_auth(config.auth_details, &credentials).await?;
-    s.stop_with_newline();
+    info!("Auth ok!");
 
     // Save auth details
     config.auth_details = Some(auth_details.clone());
     confy::store(APP_NAME, None, config)?;
 
-    let mut s = Spinner::new(Spinners::Dots, "Querying for imagery...".into());
-    let fc = list_imagery(&client, &auth_details, args.into()).await?;
-    s.stop_with_newline();
-    println!("features:\n{}", format_feature_collection(&fc));
-
-    Ok(())
+    println!("args: {:#?}", args);
+    match args.intent {
+        ModeIntent::List => {
+            let mut s = Spinner::new(Spinners::Dots, "Querying for imagery...".into());
+            let fc = list_imagery(&client, &auth_details, args.into()).await?;
+            s.stop_with_newline();
+            println!("Features from list:\n{}", format_feature_collection(&fc));
+            Ok(())
+        },
+        ModeIntent::Error(reason) => Err(format!("Something went wrong: {}", reason).into()),
+        _ => Ok(()) // Catch for all other types, like unknown or NYIs.
+    }
 }
 

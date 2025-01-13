@@ -10,8 +10,24 @@ use crate::util::parse_date;
 
 const COMMAND_NAME: &str = "copernicus";
 
+/*
+ * Enum representing an interpreted user intent. Used to signal that we should
+ * behave as though asked to list, or search, or download, depending on args or
+ * provided subcommands.
+ */
+#[derive(Debug)]
+pub enum ModeIntent {
+    List,
+    // TODO: Search,
+    Download,
+    Error(String),
+    Unknown,
+}
+
+
 #[derive(Debug)]
 pub struct Args {
+    pub intent: ModeIntent,
     pub ids: Option<String>,
     pub collection: Option<String>,
     pub bbox: Option<String>,
@@ -55,6 +71,7 @@ fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
 
 // Retrieves args from a match / submatch
 fn get_standard_args(m: &ArgMatches) -> Args {
+    let intent = ModeIntent::Unknown;
     let collection = None;
     // Options
     let ids = m.get_one::<String>("ids").cloned();
@@ -65,7 +82,7 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     let limit = parse_u16(m.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(m.get_one::<String>("page").cloned()).ok();
 
-    Args { ids, collection, bbox, from, to, sortby, limit, page }
+    Args { intent, ids, collection, bbox, from, to, sortby, limit, page }
 }
 
 // Extracts arguments from clap::ArgMatches for each subcommand.
@@ -76,8 +93,17 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             // Options
             let mut args = get_standard_args(submatch);
             // Settings w defaults
+            args.intent = ModeIntent::List;
             args.collection = submatch.get_one::<String>("collection").cloned()
                 .or(Some(collection_default));
+            Ok(args)
+        },
+        Some(("download", submatch)) => {
+            // Options
+            let mut args = get_standard_args(submatch);
+            // Settings w defaults
+            args.intent = ModeIntent::Download;
+            args.collection = None;
             Ok(args)
         },
         Some((invalid, _submatch)) => {
@@ -87,6 +113,7 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             // Options
             let mut args = get_standard_args(&am);
             // Settings w defaults
+            //args.intent = ModeIntent::List;
             args.collection = am.get_one::<String>("collection").cloned()
                 .or(Some(collection_default));
             Ok(args)
@@ -136,6 +163,7 @@ pub fn get_args() -> Args {
                     .long("collection")
                     .help("specify which collection to query. Default: SENTINEL-2")
                 )
+                .about("List imagery from a specific collection")
         )
         .subcommand(
             Command::new("download")
@@ -143,6 +171,7 @@ pub fn get_args() -> Args {
                     .long("ids")
                     .help("specify which products to download")
                 )
+                .about("Download imagery using ids obtained through <list>")
         )
         // TODO duplicate for compatibility with subcommandless invocation
         .arg(Arg::new("collection")
@@ -158,6 +187,7 @@ pub fn get_args() -> Args {
         Err(e) => {
             error!("Unable to parse arguments: {e}");
             Args {
+                intent: ModeIntent::Error(String::from("Unable to parse arguments")),
                 ids: None,
                 collection: None,
                 bbox: None,

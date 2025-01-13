@@ -141,7 +141,7 @@ pub struct ListParams {
 
 impl From<Args> for ListParams {
     fn from(a: Args) -> Self {
-        let Args { ids, collection, bbox, from, to, sortby, limit, page } = a;
+        let Args { ids, collection, bbox, from, to, sortby, limit, page, .. } = a;
         ListParams { ids, collection, bbox, from, to, sortby, limit, page }
     }
 }
@@ -227,3 +227,15 @@ pub async fn list_imagery(
     }
 }
 
+pub struct DownloadParams {
+    ids: Vec<String>,
+    destination: String,
+}
+
+pub async fn download_imagery(
+    client: &Client,
+    auth_details: &AuthDetails,
+    download_params: DownloadParams,
+) -> Result<(), Box<dyn Error>> {
+    todo!("Not yet implemented!");
+}
