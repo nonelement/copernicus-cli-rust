@@ -238,5 +238,7 @@ pub async fn download_imagery(
     auth_details: &AuthDetails,
     download_params: DownloadParams,
 ) -> Result<(), Box<dyn Error>> {
+    // Without caching search or list values, will need to look up id for product url
+    // Maybe latency isnt so bad, given id lookups are fairly quick?
     todo!("Not yet implemented!");
 }
