@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::offset::Utc;
 use chrono::{DateTime, SecondsFormat::Secs};
-use geojson::FeatureCollection;
+use geojson::{Feature, FeatureCollection};
 use log::{info, error};
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
@@ -227,18 +227,20 @@ pub async fn list_imagery(
     }
 }
 
-pub struct DownloadParams {
+#[derive(Debug)]
+pub struct DownloadDetails {
     ids: Vec<String>,
     destination: String,
+    size: u64,
 }
 
 // URL example: https://catalogue.dataspace.copernicus.eu/odata/v1/Products(56db10b0-ede4-4332-a110-2a6ae003048a)/$value
 pub async fn download_imagery(
     client: &Client,
     auth_details: &AuthDetails,
-    download_params: DownloadParams,
-) -> Result<(), Box<dyn Error>> {
-    // Without caching search or list values, will need to look up id for product url
-    // Maybe latency isnt so bad, given id lookups are fairly quick?
+    feature: &Feature,
+) -> Result<DownloadDetails, Box<dyn Error>> {
+    // Check feature properties for product url, error if not present
+    // If present, do an authenticated download to the current dir.
     todo!("Not yet implemented!");
 }

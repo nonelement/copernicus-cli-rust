@@ -26,7 +26,7 @@ use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
 
 use args::{ModeIntent, get_args};
-use api::{AuthDetails, check_auth, list_imagery};
+use api::{AuthDetails, check_auth, download_imagery, list_imagery};
 use util::format_feature_collection;
 
 const APP_NAME: &str = "COPERNICUS-CLI";
@@ -99,6 +99,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let fc = list_imagery(&client, &auth_details, args.into()).await?;
             s.stop_with_newline();
             println!("Features from list:\n{}", format_feature_collection(&fc));
+            Ok(())
+        },
+        ModeIntent::Download => {
+            let mut s = Spinner::new(Spinners::Dots, "Querying for imagery with id...".into());
+            let fc = list_imagery(&client, &auth_details, args.clone().into()).await?;
+            s.stop_with_newline();
+            if fc.features.is_empty() {
+                return Err(format!("No imagery found for id: {:?}", args.ids).into());
+            }
+            let mut s = Spinner::new(Spinners::Dots, "Downloading imagery...".into());
+            let details = download_imagery(&client, &auth_details, &fc.features[0]).await?;
+            s.stop_with_newline();
+            println!("Download complete with: {:?}", details);
             Ok(())
         },
         ModeIntent::Error(reason) => Err(format!("Something went wrong: {}", reason).into()),

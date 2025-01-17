@@ -15,7 +15,7 @@ const COMMAND_NAME: &str = "copernicus";
  * behave as though asked to list, or search, or download, depending on args or
  * provided subcommands.
  */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ModeIntent {
     List,
     // TODO: Search,
@@ -25,7 +25,7 @@ pub enum ModeIntent {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Args {
     pub intent: ModeIntent,
     pub ids: Option<String>,
