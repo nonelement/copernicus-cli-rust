@@ -32,7 +32,7 @@ const FEATURE_DETAILS_FORMAT: &str = r#"
   <CAPTURE_TIME> cloudy: <CLOUD_COVER>
   bbox: <BBOX>
   quicklook: <QUICKLOOK_HREF>
-  archive: <PRODUCT_HREF>
+  procuct: <PRODUCT_HREF>
 "#;
 
 // Maps some color words to function calls to apply settings
@@ -59,7 +59,7 @@ fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
 }
 
 // Path into a geojson::JsonObject to retrieve a nested value
-fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
+pub fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
     let mut v: &JsonObject = if let Some(v) = m { v } else { return None };
     let mut t: Option<JsonValue> = Some(Value::Null);
     for name in path {
@@ -73,7 +73,7 @@ fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
 }
 
 // Converts feature ids to a string here for display.
-fn get_id(id: &Option<Id>) -> Option<String> {
+pub fn get_id(id: &Option<Id>) -> Option<String> {
     match id {
         Some(Id::String(v)) => Some(v.clone()),
         Some(Id::Number(n)) => Some(n.to_string()),
@@ -82,7 +82,7 @@ fn get_id(id: &Option<Id>) -> Option<String> {
 }
 
 // Unwraps serde_json::Value and converts it to a string for display
-fn get_value(value_opt: Option<Value>) -> Option<String> {
+pub fn get_value(value_opt: Option<Value>) -> Option<String> {
     if let Some(value) = value_opt {
         match value {
             Value::String(v) => Some(v.to_string()),

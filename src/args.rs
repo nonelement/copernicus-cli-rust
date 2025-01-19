@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::default::Default;
 
 use chrono::offset::Utc;
 use chrono::DateTime;
@@ -15,17 +16,18 @@ const COMMAND_NAME: &str = "copernicus";
  * behave as though asked to list, or search, or download, depending on args or
  * provided subcommands.
  */
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub enum ModeIntent {
     List,
     // TODO: Search,
     Download,
     Error(String),
+    #[default]
     Unknown,
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Args {
     pub intent: ModeIntent,
     pub ids: Option<String>,
@@ -37,6 +39,8 @@ pub struct Args {
     pub page: Option<u16>,
     pub limit: Option<u16>
 }
+
+
 
 /*
  * Parses a string as a datetime.
@@ -100,10 +104,13 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
         },
         Some(("download", submatch)) => {
             // Options
-            let mut args = get_standard_args(submatch);
+            let mut args: Args = Default::default();
+            let ids = submatch.get_one::<String>("ids").cloned();
+            args.ids = ids;
             // Settings w defaults
             args.intent = ModeIntent::Download;
-            args.collection = None;
+            args.collection = submatch.get_one::<String>("collection").cloned()
+                .or(Some(collection_default));
             Ok(args)
         },
         Some((invalid, _submatch)) => {
@@ -152,6 +159,10 @@ fn apply_filter_args(c: Command) -> Command {
             .long("page")
             .help("provides the page number to retrieve for paginated responses")
     )
+    .arg(Arg::new("collection")
+        .long("collection")
+        .help("specify which collection to query. Default: SENTINEL-2")
+    )
 }
 
 pub fn get_args() -> Args {
@@ -159,10 +170,6 @@ pub fn get_args() -> Args {
     let matches = apply_filter_args(Command::new(COMMAND_NAME))
         .subcommand(
             apply_filter_args(Command::new("list"))
-                .arg(Arg::new("collection")
-                    .long("collection")
-                    .help("specify which collection to query. Default: SENTINEL-2")
-                )
                 .about("List imagery from a specific collection")
         )
         .subcommand(
@@ -171,12 +178,11 @@ pub fn get_args() -> Args {
                     .long("ids")
                     .help("specify which products to download")
                 )
+                .arg(Arg::new("collection")
+                    .long("collection")
+                    .help("specify which collection to query. Default: SENTINEL-2")
+                )
                 .about("Download imagery using ids obtained through <list>")
-        )
-        // TODO duplicate for compatibility with subcommandless invocation
-        .arg(Arg::new("collection")
-            .long("collection")
-            .help("specify which collection to query. Default: SENTINEL-2")
         )
         .get_matches();
 

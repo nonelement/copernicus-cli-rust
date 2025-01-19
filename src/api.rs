@@ -13,6 +13,7 @@ use url::Url;
 
 use crate::Credentials;
 use crate::args::Args;
+use crate::util::{get_id, get_value, from_path};
 
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
@@ -229,9 +230,10 @@ pub async fn list_imagery(
 
 #[derive(Debug)]
 pub struct DownloadDetails {
-    ids: Vec<String>,
-    destination: String,
-    size: u64,
+    pub ids: Vec<String>,
+    pub url: String,
+    pub destination: String,
+    pub size: u64,
 }
 
 // URL example: https://catalogue.dataspace.copernicus.eu/odata/v1/Products(56db10b0-ede4-4332-a110-2a6ae003048a)/$value
@@ -240,6 +242,9 @@ pub async fn download_imagery(
     auth_details: &AuthDetails,
     feature: &Feature,
 ) -> Result<DownloadDetails, Box<dyn Error>> {
+    let id = get_id(&feature.id);
+    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
+    print!("id: {id:#?},\nproduct_href: {product_href:#?}");
     // Check feature properties for product url, error if not present
     // If present, do an authenticated download to the current dir.
     todo!("Not yet implemented!");

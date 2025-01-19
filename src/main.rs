@@ -92,7 +92,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     config.auth_details = Some(auth_details.clone());
     confy::store(APP_NAME, None, config)?;
 
-    println!("args: {:#?}", args);
     match args.intent {
         ModeIntent::List => {
             let mut s = Spinner::new(Spinners::Dots, "Querying for imagery...".into());
@@ -103,6 +102,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         },
         ModeIntent::Download => {
             let mut s = Spinner::new(Spinners::Dots, "Querying for imagery with id...".into());
+            // This still requires a collection, which for now will default to S2
+            // In the future we should search, which doesn't require a specific collection
             let fc = list_imagery(&client, &auth_details, args.clone().into()).await?;
             s.stop_with_newline();
             if fc.features.is_empty() {
