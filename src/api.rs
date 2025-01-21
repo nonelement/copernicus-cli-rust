@@ -248,7 +248,9 @@ pub async fn download_imagery(
     let feature_id = get_id(&feature.id);
     let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
     if let (Some(id), Some(href)) = (feature_id, product_url) {
-        let url = Url::parse(&href)?;
+        // replace: catalogue -> download
+        let adjusted_url = href.replace("catalogue", "download");
+        let url = Url::parse(&adjusted_url)?;
         let request = client
             .get(url)
             .timeout(Duration::from_secs(1_000_000))
