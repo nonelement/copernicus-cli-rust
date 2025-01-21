@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 use std::convert::From;
 use std::error::Error;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::fs::File;
+use std::io::prelude::*;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::offset::Utc;
 use chrono::{DateTime, SecondsFormat::Secs};
+use futures_util::StreamExt;
 use geojson::{Feature, FeatureCollection};
 use log::{info, error};
 use reqwest::{Client, Response};
@@ -242,10 +245,42 @@ pub async fn download_imagery(
     auth_details: &AuthDetails,
     feature: &Feature,
 ) -> Result<DownloadDetails, Box<dyn Error>> {
-    let id = get_id(&feature.id);
-    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
-    print!("id: {id:#?},\nproduct_href: {product_href:#?}");
-    // Check feature properties for product url, error if not present
-    // If present, do an authenticated download to the current dir.
-    todo!("Not yet implemented!");
+    let feature_id = get_id(&feature.id);
+    let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
+    if let (Some(id), Some(href)) = (feature_id, product_url) {
+        let url = Url::parse(&href)?;
+        let request = client
+            .get(url)
+            .timeout(Duration::from_secs(1_000_000))
+            .header("Authorization", format!("Bearer {}", auth_details.access_token));
+        println!("request:\n{:#?}", request);
+        let response = request.send().await?;
+        // Create file, write byte stream
+        if response.status().is_success() {
+            let mut f = File::create(format!("{id}.zip"))?;
+            let mut stream = response.bytes_stream();
+            loop {
+                if let Some(bytes) = stream.next().await {
+                    match f.write(&bytes?) {
+                        Ok(n) => println!("wrote {} bytes", n),
+                        Err(_) => {
+                            println!("something went wrong!");
+                            break;
+                        }
+                    }
+                } else {
+                    println!("done writing!");
+                    break;
+                }
+            }
+        } else {
+            println!("failed. response:\n{:#?}", response);
+        }
+
+        // Write bytes here.
+        Ok(DownloadDetails { ids: vec![], url: String::new(), destination: String::new(), size: 0 })
+    } else {
+        Err(format!("Unable to download resource {:?}", feature.id).into())
+    }
 }
+

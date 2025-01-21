@@ -4,6 +4,7 @@ extern crate colored;
 extern crate confy;
 extern crate dotenv;
 extern crate env_logger;
+extern crate futures_util;
 extern crate geojson;
 extern crate log;
 extern crate reqwest;
