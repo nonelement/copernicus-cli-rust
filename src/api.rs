@@ -236,7 +236,7 @@ pub struct DownloadDetails {
     pub ids: Vec<String>,
     pub url: String,
     pub destination: String,
-    pub size: u64,
+    pub size: usize,
 }
 
 // URL example: https://catalogue.dataspace.copernicus.eu/odata/v1/Products(56db10b0-ede4-4332-a110-2a6ae003048a)/$value
@@ -247,24 +247,28 @@ pub async fn download_imagery(
 ) -> Result<DownloadDetails, Box<dyn Error>> {
     let feature_id = get_id(&feature.id);
     let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
-    if let (Some(id), Some(href)) = (feature_id, product_url) {
-        // replace: catalogue -> download
-        let adjusted_url = href.replace("catalogue", "download");
-        let url = Url::parse(&adjusted_url)?;
+    if let (Some(id), Some(catalogue_href)) = (feature_id, product_url) {
+        // This seems to be required by the API. The URI we obtain has the catalogue subdomain, and
+        // that URL when curl'ed or wget'ed redirects with a 301, but seemingly 401s for this tool.
+        // The Python example in the official docs begins with a download subdomain url, so it's
+        // not clear whether it's expected that you do string substitution when using the feature
+        // provided product URL.
+        let download_url = catalogue_href.replace("catalogue", "download");
+        let url = Url::parse(&download_url)?;
         let request = client
             .get(url)
             .timeout(Duration::from_secs(1_000_000))
             .header("Authorization", format!("Bearer {}", auth_details.access_token));
-        println!("request:\n{:#?}", request);
         let response = request.send().await?;
         // Create file, write byte stream
         if response.status().is_success() {
             let mut f = File::create(format!("{id}.zip"))?;
             let mut stream = response.bytes_stream();
+            let mut bytes_total: usize = 0;
             loop {
                 if let Some(bytes) = stream.next().await {
                     match f.write(&bytes?) {
-                        Ok(n) => println!("wrote {} bytes", n),
+                        Ok(n) => bytes_total += n,
                         Err(_) => {
                             println!("something went wrong!");
                             break;
@@ -275,12 +279,16 @@ pub async fn download_imagery(
                     break;
                 }
             }
+            Ok(DownloadDetails {
+                ids: vec![id],
+                url: download_url,
+                destination: String::new(),
+                size: bytes_total
+            })
         } else {
             println!("failed. response:\n{:#?}", response);
+            Err(format!("Failure response from server: {:#?}", response).into())
         }
-
-        // Write bytes here.
-        Ok(DownloadDetails { ids: vec![], url: String::new(), destination: String::new(), size: 0 })
     } else {
         Err(format!("Unable to download resource {:?}", feature.id).into())
     }
