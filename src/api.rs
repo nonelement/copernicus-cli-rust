@@ -205,6 +205,19 @@ fn with_collection(url: &'static str, collection: &Option<String>) -> Result<Str
     }
 }
 
+fn get_header_info(r: &Response) -> (usize, String) {
+    let h = r.headers();
+    // Get header value, assume string and not bytes, then convert to usize.
+    let length_value = if let Some(v) = h.get("content-length") { v.to_str() } else { Ok("0") };
+    let length = if let Ok(l) = length_value { l.parse::<usize>().unwrap_or(0) } else { 0 };
+    // Get header value, convert to strings, don't bother parsing them yet.
+    let disposition_value = if let Some(v) = h.get("content-disposition") { v.to_str() } else { Ok("") };
+    let full_disposition = if let Ok(dv) = disposition_value { String::from(dv) } else { String::new() };
+    let disposition_file = full_disposition.split("filename=").last().unwrap_or("").to_string();
+
+    (length, disposition_file)
+}
+
 // Queries for imagery that satisfies constraints
 pub async fn list_imagery(
     client: &Client,
@@ -249,10 +262,11 @@ pub async fn download_imagery(
     let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
     if let (Some(id), Some(catalogue_href)) = (feature_id, product_url) {
         // This seems to be required by the API. The URI we obtain has the catalogue subdomain, and
-        // that URL when curl'ed or wget'ed redirects with a 301, but seemingly 401s for this tool.
+        // when curl'ed or wget'ed the API responds with a 301 redirecting to the download
+        // subdomain, but seemingly returns a 401s for this tool.
         // The Python example in the official docs begins with a download subdomain url, so it's
-        // not clear whether it's expected that you do string substitution when using the feature
-        // provided product URL.
+        // not clear whether it's expected that you do string substitution when using the feature's
+        // product URL.
         let download_url = catalogue_href.replace("catalogue", "download");
         let url = Url::parse(&download_url)?;
         let request = client
@@ -261,7 +275,10 @@ pub async fn download_imagery(
             .header("Authorization", format!("Bearer {}", auth_details.access_token));
         let response = request.send().await?;
         // Create file, write byte stream
+        println!("response: {:#?}", response);
         if response.status().is_success() {
+            // Unused at the moment, but will let us show some extra info during downloads
+            let (_length, _file) = get_header_info(&response);
             let mut f = File::create(format!("{id}.zip"))?;
             let mut stream = response.bytes_stream();
             let mut bytes_total: usize = 0;
