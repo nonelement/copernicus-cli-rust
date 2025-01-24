@@ -3,6 +3,7 @@ use std::convert::From;
 use std::error::Error;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::offset::Utc;
@@ -218,6 +219,10 @@ fn get_header_info(r: &Response) -> (usize, String) {
     (length, disposition_file)
 }
 
+fn compose_path(path: String, name: &String) -> PathBuf {
+    [&path, &format!("{name}.zip")].iter().collect()
+}
+
 // Queries for imagery that satisfies constraints
 pub async fn list_imagery(
     client: &Client,
@@ -248,7 +253,7 @@ pub async fn list_imagery(
 pub struct DownloadDetails {
     pub ids: Vec<String>,
     pub url: String,
-    pub destination: String,
+    pub destination: PathBuf,
     pub size: usize,
 }
 
@@ -257,6 +262,7 @@ pub async fn download_imagery(
     client: &Client,
     auth_details: &AuthDetails,
     feature: &Feature,
+    output_dir: Option<String>,
 ) -> Result<DownloadDetails, Box<dyn Error>> {
     let feature_id = get_id(&feature.id);
     let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
@@ -275,11 +281,11 @@ pub async fn download_imagery(
             .header("Authorization", format!("Bearer {}", auth_details.access_token));
         let response = request.send().await?;
         // Create file, write byte stream
-        println!("response: {:#?}", response);
         if response.status().is_success() {
             // Unused at the moment, but will let us show some extra info during downloads
             let (_length, _file) = get_header_info(&response);
-            let mut f = File::create(format!("{id}.zip"))?;
+            let path = compose_path(output_dir.unwrap(), &id);
+            let mut f = File::create(&path)?;
             let mut stream = response.bytes_stream();
             let mut bytes_total: usize = 0;
             loop {
@@ -299,7 +305,7 @@ pub async fn download_imagery(
             Ok(DownloadDetails {
                 ids: vec![id],
                 url: download_url,
-                destination: String::new(),
+                destination: path,
                 size: bytes_total
             })
         } else {

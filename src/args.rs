@@ -37,7 +37,8 @@ pub struct Args {
     pub to: Option<DateTime<Utc>>,
     pub sortby: Option<String>,
     pub page: Option<u16>,
-    pub limit: Option<u16>
+    pub limit: Option<u16>,
+    pub output_dir: Option<String>,
 }
 
 
@@ -77,6 +78,7 @@ fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
 fn get_standard_args(m: &ArgMatches) -> Args {
     let intent = ModeIntent::Unknown;
     let collection = None;
+    let output_dir = None;
     // Options
     let ids = m.get_one::<String>("ids").cloned();
     let bbox = m.get_one::<String>("bbox").cloned();
@@ -86,7 +88,7 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     let limit = parse_u16(m.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(m.get_one::<String>("page").cloned()).ok();
 
-    Args { intent, ids, collection, bbox, from, to, sortby, limit, page }
+    Args { intent, ids, collection, bbox, from, to, sortby, limit, page, output_dir }
 }
 
 // Extracts arguments from clap::ArgMatches for each subcommand.
@@ -111,6 +113,8 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             args.intent = ModeIntent::Download;
             args.collection = submatch.get_one::<String>("collection").cloned()
                 .or(Some(collection_default));
+            args.output_dir = submatch.get_one::<String>("output").cloned()
+                .or(Some(String::from(".")));
             Ok(args)
         },
         Some((invalid, _submatch)) => {
@@ -183,6 +187,11 @@ pub fn get_args() -> Args {
                     .help("specify which collection to query. Default: SENTINEL-2")
                 )
                 .about("Download imagery using ids obtained through <list>")
+                .arg(Arg::new("output")
+                    .long("output")
+                    .short('o')
+                    .help("Specify where to write the file")
+                )
         )
         .get_matches();
 
@@ -202,6 +211,7 @@ pub fn get_args() -> Args {
                 sortby: None,
                 limit: None,
                 page: None,
+                output_dir: None,
             }
         }
     }
