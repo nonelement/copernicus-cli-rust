@@ -113,7 +113,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut s = Spinner::new(Spinners::Dots, "Downloading imagery...".into());
             let details = download_imagery(&client, &auth_details, &fc.features[0], args.output_dir).await?;
             s.stop_with_newline();
-            println!("Download complete with: {:?}", details);
+            println!("Download complete.");
+            println!("{} bytes, saved to: {}", details.size, details.destination.to_str().unwrap_or("_"));
             Ok(())
         },
         ModeIntent::Error(reason) => Err(format!("Something went wrong: {}", reason).into()),

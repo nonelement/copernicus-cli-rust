@@ -10,7 +10,7 @@ use chrono::offset::Utc;
 use chrono::{DateTime, SecondsFormat::Secs};
 use futures_util::StreamExt;
 use geojson::{Feature, FeatureCollection};
-use log::{info, error};
+use log::{debug, info, error};
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
 use url::Url;
@@ -251,13 +251,10 @@ pub async fn list_imagery(
 
 #[derive(Debug)]
 pub struct DownloadDetails {
-    pub ids: Vec<String>,
-    pub url: String,
     pub destination: PathBuf,
     pub size: usize,
 }
 
-// URL example: https://catalogue.dataspace.copernicus.eu/odata/v1/Products(56db10b0-ede4-4332-a110-2a6ae003048a)/$value
 pub async fn download_imagery(
     client: &Client,
     auth_details: &AuthDetails,
@@ -291,20 +288,21 @@ pub async fn download_imagery(
             loop {
                 if let Some(bytes) = stream.next().await {
                     match f.write(&bytes?) {
-                        Ok(n) => bytes_total += n,
-                        Err(_) => {
-                            println!("something went wrong!");
+                        Ok(n) => {
+                            debug!("wrote {} bytes", n);
+                            bytes_total += n;
+                        },
+                        Err(e) => {
+                            error!("Something went wrong: {}", e);
                             break;
                         }
                     }
                 } else {
-                    println!("done writing!");
+                    debug!("write ended.");
                     break;
                 }
             }
             Ok(DownloadDetails {
-                ids: vec![id],
-                url: download_url,
                 destination: path,
                 size: bytes_total
             })
