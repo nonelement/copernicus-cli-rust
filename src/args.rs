@@ -19,7 +19,7 @@ const COMMAND_NAME: &str = "copernicus";
 #[derive(Clone, Debug, Default)]
 pub enum ModeIntent {
     List,
-    // TODO: Search,
+    Search,
     Download,
     Error(String),
     #[default]
@@ -31,7 +31,7 @@ pub enum ModeIntent {
 pub struct Args {
     pub intent: ModeIntent,
     pub ids: Option<String>,
-    pub collection: Option<String>,
+    pub collections: Option<String>,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
@@ -76,8 +76,8 @@ fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
 
 // Retrieves args from a match / submatch
 fn get_standard_args(m: &ArgMatches) -> Args {
+    let collections_default = String::from("SENTINEL-2");
     let intent = ModeIntent::Unknown;
-    let collection = None;
     let output_dir = None;
     // Options
     let ids = m.get_one::<String>("ids").cloned();
@@ -87,21 +87,28 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     let sortby = m.get_one::<String>("sortby").cloned();
     let limit = parse_u16(m.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(m.get_one::<String>("page").cloned()).ok();
+    let collections = m.get_one::<String>("collections").cloned()
+                .or(Some(collections_default));
 
-    Args { intent, ids, collection, bbox, from, to, sortby, limit, page, output_dir }
+    Args { intent, ids, collections, bbox, from, to, sortby, limit, page, output_dir }
 }
 
 // Extracts arguments from clap::ArgMatches for each subcommand.
 fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
-    let collection_default = String::from("SENTINEL-2");
+    let collections_default = String::from("SENTINEL-2");
     match am.subcommand() {
         Some(("list", submatch)) => {
             // Options
             let mut args = get_standard_args(submatch);
             // Settings w defaults
             args.intent = ModeIntent::List;
-            args.collection = submatch.get_one::<String>("collection").cloned()
-                .or(Some(collection_default));
+            Ok(args)
+        },
+        Some(("search", submatch)) => {
+            // Options
+            let mut args = get_standard_args(submatch);
+            // Settings w defaults
+            args.intent = ModeIntent::Search;
             Ok(args)
         },
         Some(("download", submatch)) => {
@@ -111,8 +118,8 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             args.ids = ids;
             // Settings w defaults
             args.intent = ModeIntent::Download;
-            args.collection = submatch.get_one::<String>("collection").cloned()
-                .or(Some(collection_default));
+            args.collections = submatch.get_one::<String>("collections").cloned()
+                .or(Some(collections_default));
             args.output_dir = submatch.get_one::<String>("output").cloned()
                 .or(Some(String::from(".")));
             Ok(args)
@@ -125,8 +132,6 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             let mut args = get_standard_args(&am);
             // Settings w defaults
             args.intent = ModeIntent::List;
-            args.collection = am.get_one::<String>("collection").cloned()
-                .or(Some(collection_default));
             Ok(args)
         }
     }
@@ -163,9 +168,9 @@ fn apply_filter_args(c: Command) -> Command {
             .long("page")
             .help("provides the page number to retrieve for paginated responses")
     )
-    .arg(Arg::new("collection")
-        .long("collection")
-        .help("specify which collection to query. Default: SENTINEL-2")
+    .arg(Arg::new("collections")
+        .long("collections")
+        .help("specify which collections to query. Default: SENTINEL-2")
     )
 }
 
@@ -174,7 +179,7 @@ pub fn get_args() -> Args {
     let matches = apply_filter_args(Command::new(COMMAND_NAME))
         .subcommand(
             apply_filter_args(Command::new("list"))
-                .about("List imagery from a specific collection")
+                .about("List imagery from a specific collections")
         )
         .subcommand(
             Command::new("download")
@@ -182,8 +187,8 @@ pub fn get_args() -> Args {
                     .long("ids")
                     .help("specify which products to download")
                 )
-                .arg(Arg::new("collection")
-                    .long("collection")
+                .arg(Arg::new("collections")
+                    .long("collections")
                     .help("specify which collection to query. Default: SENTINEL-2")
                 )
                 .about("Download imagery using ids obtained through <list>")
@@ -192,6 +197,10 @@ pub fn get_args() -> Args {
                     .short('o')
                     .help("Specify where to write the file")
                 )
+        )
+        .subcommand(
+            apply_filter_args(Command::new("search"))
+                .about("Search for available imagery")
         )
         .get_matches();
 
@@ -204,7 +213,7 @@ pub fn get_args() -> Args {
             Args {
                 intent: ModeIntent::Error(String::from("Unable to parse arguments")),
                 ids: None,
-                collection: None,
+                collections: None,
                 bbox: None,
                 from: None,
                 to: None,

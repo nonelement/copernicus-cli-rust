@@ -27,7 +27,7 @@ use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
 
 use args::{ModeIntent, get_args};
-use api::{AuthDetails, check_auth, download_imagery, list_imagery};
+use api::{AuthDetails, check_auth, download_imagery, list_imagery, search_imagery};
 use util::format_feature_collection;
 
 const APP_NAME: &str = "COPERNICUS-CLI";
@@ -98,7 +98,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut s = Spinner::new(Spinners::Dots, "Querying for imagery...".into());
             let fc = list_imagery(&client, &auth_details, args.into()).await?;
             s.stop_with_newline();
-            println!("Features from list:\n{}", format_feature_collection(&fc));
+            println!("List results:\n{}", format_feature_collection(&fc));
+            Ok(())
+        },
+        ModeIntent::Search => {
+            let mut s = Spinner::new(Spinners::Dots, "Searching for imagery...".into());
+            let fc = search_imagery(&client, &auth_details, args.into()).await?;
+            s.stop_with_newline();
+            println!("Search results:\n{}", format_feature_collection(&fc));
             Ok(())
         },
         ModeIntent::Download => {

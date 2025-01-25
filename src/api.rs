@@ -23,6 +23,7 @@ use crate::util::{get_id, get_value, from_path};
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 // GET
 const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/{}/items";
+const SEARCH_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/search";
 
 // Core auth struct. Gets saved and updated each run with new information.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -133,9 +134,9 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 // API Interactions
 
 // Params for list endpoint. Most can be used together to filter results.
-pub struct ListParams {
+pub struct QueryParams {
     pub ids: Option<String>,
-    pub collection: Option<String>,
+    pub collections: Option<String>,
     pub bbox: Option<String>,
     pub from: Option<DateTime<Utc>>,
     pub to: Option<DateTime<Utc>>,
@@ -144,46 +145,53 @@ pub struct ListParams {
     pub page: Option<u16>,
 }
 
-impl From<Args> for ListParams {
+impl From<Args> for QueryParams {
     fn from(a: Args) -> Self {
-        let Args { ids, collection, bbox, from, to, sortby, limit, page, .. } = a;
-        ListParams { ids, collection, bbox, from, to, sortby, limit, page }
+        let Args { ids, collections, bbox, from, to, sortby, limit, page, .. } = a;
+        QueryParams { ids, collections, bbox, from, to, sortby, limit, page }
     }
 }
 
-// Generates query params from ListParams
+// Generates query params from QueryParams
 // Return value matches interface provided by Url.set_query
 fn generate_query(
-    list_params: ListParams
+    query_params: QueryParams,
+    include_collections: bool,
 ) -> Option<String> {
     let mut options: Vec<String> = Vec::new();
 
-    if let Some(ids) = list_params.ids {
+    if let Some(ids) = query_params.ids {
         options.push(format!("ids={}", ids));
     }
 
-    if let Some(bbox) = list_params.bbox {
+    if let Some(bbox) = query_params.bbox {
         options.push(format!("bbox={}", bbox));
     }
 
-    if list_params.from.is_some() || list_params.to.is_some() {
+    if query_params.from.is_some() || query_params.to.is_some() {
         options.push(format!(
             "datetime={}/{}",
-            if let Some(from) = list_params.from { from.to_rfc3339_opts(Secs, true) } else { String::from("") },
-            if let Some(to) = list_params.to { to.to_rfc3339_opts(Secs, true) } else { String::from("") }
+            if let Some(from) = query_params.from { from.to_rfc3339_opts(Secs, true) } else { String::from("") },
+            if let Some(to) = query_params.to { to.to_rfc3339_opts(Secs, true) } else { String::from("") }
         ));
     }
 
-    if let Some(sortby) = list_params.sortby {
+    if let Some(sortby) = query_params.sortby {
         options.push(format!("sortby={}", sortby));
     }
 
-    if let Some(limit) = list_params.limit {
+    if let Some(limit) = query_params.limit {
         options.push(format!("limit={}", limit));
     }
 
-    if let Some(page) = list_params.page {
+    if let Some(page) = query_params.page {
         options.push(format!("page={}", page));
+    }
+
+    if include_collections {
+        if let Some(collections) = query_params.page {
+            options.push(format!("collections={}", collections));
+        }
     }
 
     if !options.is_empty() {
@@ -195,9 +203,16 @@ fn generate_query(
 
 fn with_collection(url: &'static str, collection: &Option<String>) -> Result<String, Box<dyn Error>> {
     // Can be used as a template
-    if let Some(collection_id) = collection {
+    if let Some(collection_ids) = collection {
+        let mut collection_id = collection_ids.clone();
+        // Use first collection id if multiple
+        if collection_ids.contains(",") {
+            if let Some(first_id) = collection_ids.split(",").next() {
+                collection_id = first_id.to_string();
+            }
+        }
         if url.contains("{}") {
-            Ok(url.replace("{}", collection_id))
+            Ok(url.replace("{}", &collection_id))
         } else {
             Err("Unable to use provided url as a template.".into())
         }
@@ -227,10 +242,36 @@ fn compose_path(path: String, name: &String) -> PathBuf {
 pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
-    list_params: ListParams,
+    query_params: QueryParams,
 ) -> Result<FeatureCollection, Box<dyn Error>> {
-    let mut url: Url = Url::parse(&with_collection(LIST_URL, &list_params.collection)?)?;
-    let query_params = generate_query(list_params);
+    let mut url: Url = Url::parse(&with_collection(LIST_URL, &query_params.collections)?)?;
+    let query_params = generate_query(query_params, false);
+    url.set_query(query_params.as_deref());
+
+    info!("API::list_imagery: Requesting {}...", url);
+    let response_text = client
+        .get(url)
+        .header("Authorization", format!("Bearer {}", auth_details.access_token))
+        .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
+    info!("API::list_imagery: Response: \n{}", response_text);
+    let maybe_fc = serde_json::from_str::<FeatureCollection>(&response_text);
+    match maybe_fc {
+        Ok(fc) => Ok(fc),
+        Err(e) => {
+            error!("Unable to deserialize response: {}.\nResponse:{}", e, response_text);
+            Err(Box::new(e))
+        }
+    }
+}
+
+// Queries for imagery that satisfies constraints
+pub async fn search_imagery(
+    client: &Client,
+    auth_details: &AuthDetails,
+    query_params: QueryParams,
+) -> Result<FeatureCollection, Box<dyn Error>> {
+    let mut url: Url = Url::parse(SEARCH_URL)?;
+    let query_params = generate_query(query_params, true);
     url.set_query(query_params.as_deref());
 
     info!("API::list_imagery: Requesting {}...", url);
