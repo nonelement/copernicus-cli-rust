@@ -182,25 +182,21 @@ pub fn get_args() -> Args {
                 .about("List imagery from a specific collections")
         )
         .subcommand(
+            apply_filter_args(Command::new("search"))
+                .about("Search for available imagery")
+        )
+        .subcommand(
             Command::new("download")
                 .arg(Arg::new("ids")
                     .long("ids")
                     .help("specify which products to download")
                 )
-                .arg(Arg::new("collections")
-                    .long("collections")
-                    .help("specify which collection to query. Default: SENTINEL-2")
-                )
-                .about("Download imagery using ids obtained through <list>")
+                .about("Download imagery using ids obtained through search or list")
                 .arg(Arg::new("output")
                     .long("output")
                     .short('o')
                     .help("Specify where to write the file")
                 )
-        )
-        .subcommand(
-            apply_filter_args(Command::new("search"))
-                .about("Search for available imagery")
         )
         .get_matches();
 

@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use chrono::offset::Utc;
 use chrono::{DateTime, SecondsFormat::Secs};
 use futures_util::StreamExt;
-use geojson::{Feature, FeatureCollection};
+use geojson::{Feature, FeatureCollection, GeoJson};
 use log::{debug, info, error};
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
@@ -254,14 +254,10 @@ pub async fn list_imagery(
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
     info!("API::list_imagery: Response: \n{}", response_text);
-    let maybe_fc = serde_json::from_str::<FeatureCollection>(&response_text);
-    match maybe_fc {
-        Ok(fc) => Ok(fc),
-        Err(e) => {
-            error!("Unable to deserialize response: {}.\nResponse:{}", e, response_text);
-            Err(Box::new(e))
-        }
-    }
+    // println!("response text: {}", response_text);
+    let geojson = response_text.parse::<GeoJson>()?;
+    let fc: FeatureCollection = FeatureCollection::try_from(geojson)?;
+    Ok(fc)
 }
 
 // Queries for imagery that satisfies constraints
@@ -280,14 +276,9 @@ pub async fn search_imagery(
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
     info!("API::list_imagery: Response: \n{}", response_text);
-    let maybe_fc = serde_json::from_str::<FeatureCollection>(&response_text);
-    match maybe_fc {
-        Ok(fc) => Ok(fc),
-        Err(e) => {
-            error!("Unable to deserialize response: {}.\nResponse:{}", e, response_text);
-            Err(Box::new(e))
-        }
-    }
+    let geojson = response_text.parse::<GeoJson>()?;
+    let fc: FeatureCollection = FeatureCollection::try_from(geojson)?;
+    Ok(fc)
 }
 
 #[derive(Debug)]
