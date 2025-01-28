@@ -26,7 +26,9 @@ pub enum ModeIntent {
     Unknown,
 }
 
-
+/*
+ * Struct representing options passed into the program.
+ */
 #[derive(Clone, Debug, Default)]
 pub struct Args {
     pub intent: ModeIntent,
@@ -41,15 +43,18 @@ pub struct Args {
     pub output_dir: Option<String>,
 }
 
-
+pub enum TimeAdjust {
+    Floor,
+    Ceil
+}
 
 /*
  * Parses a string as a datetime.
  * We parse this value to generate floor or ceil values, if just dates are given.
  */
-fn parse_datetime(arg: Option<String>) -> Result<DateTime<Utc>, Box<dyn Error>> {
+fn parse_datetime(arg: Option<String>, should_adjust: Option<TimeAdjust>) -> Result<DateTime<Utc>, Box<dyn Error>> {
     if let Some(datetime_string) = arg {
-        parse_date(datetime_string)
+        parse_date(datetime_string, should_adjust)
     } else {
         Err("Unable to parse datetime arg.".into())
     }
@@ -74,7 +79,9 @@ fn parse_u16(arg: Option<String>) -> Result<u16, Box<dyn Error>> {
     }
 }
 
-// Retrieves args from a match / submatch
+/*
+ * Retrieves args from a match / submatch and returns an Args struct.
+ */
 fn get_standard_args(m: &ArgMatches) -> Args {
     let collections_default = String::from("SENTINEL-2");
     let intent = ModeIntent::Unknown;
@@ -82,8 +89,8 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     // Options
     let ids = m.get_one::<String>("ids").cloned();
     let bbox = m.get_one::<String>("bbox").cloned();
-    let from = parse_datetime(m.get_one::<String>("from").cloned()).ok();
-    let to = parse_datetime(m.get_one::<String>("to").cloned()).ok();
+    let from = parse_datetime(m.get_one::<String>("from").cloned(), Some(TimeAdjust::Floor)).ok();
+    let to = parse_datetime(m.get_one::<String>("to").cloned(), Some(TimeAdjust::Ceil)).ok();
     let sortby = m.get_one::<String>("sortby").cloned();
     let limit = parse_u16(m.get_one::<String>("limit").cloned()).ok();
     let page = parse_u16(m.get_one::<String>("page").cloned()).ok();
@@ -93,7 +100,11 @@ fn get_standard_args(m: &ArgMatches) -> Args {
     Args { intent, ids, collections, bbox, from, to, sortby, limit, page, output_dir }
 }
 
-// Extracts arguments from clap::ArgMatches for each subcommand.
+/*
+ * Extracts arguments from clap::ArgMatches for each subcommand, which may have
+ * different argument requirements. This'll have some bearing on arg
+ * configuration, below.
+ */
 fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
     let collections_default = String::from("SENTINEL-2");
     match am.subcommand() {
@@ -137,7 +148,10 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
     }
 }
 
-// Applies common filter arguments to a command, since these'll .
+
+/*
+ * Add a set of common arguments to a command. Many subcommands will use these.
+ */
 fn apply_filter_args(c: Command) -> Command {
     c.arg(Arg::new("ids")
             .long("ids")
@@ -174,8 +188,12 @@ fn apply_filter_args(c: Command) -> Command {
     )
 }
 
+
+/*
+ * Top level args setup and parsing. Querying subcommands take similar args,
+ * download only really requires id and optionally an output directory.
+ */
 pub fn get_args() -> Args {
-    // TODO: Add subcommand for the search endpoint here.
     let matches = apply_filter_args(Command::new(COMMAND_NAME))
         .subcommand(
             apply_filter_args(Command::new("list"))

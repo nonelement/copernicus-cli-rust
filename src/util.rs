@@ -11,8 +11,13 @@ use geojson::JsonValue;
 use serde_json::Map;
 use serde_json::Value;
 
+use crate::args::TimeAdjust;
 
-// Some settings to highlight certain data in a formatted feature
+/*
+ * Hardcoded style information for List and Search outputs. At the moment these
+ * are all set to conservative (read: useless?) values.
+ * TODO: Refine this.
+ */
 const STYLES: [(&str, &str); 9] = [
     ("ID", "White"),
     ("SHORT_NAME", "White"),
@@ -25,8 +30,10 @@ const STYLES: [(&str, &str); 9] = [
     ("PRODUCT_HREF", "White"),
 ];
 
-// Singular template to use for listing features
-// TODO: Use different templates for different types of features
+/*
+ * Singular template to use for listing features
+ * TODO: Use different templates for different types of features
+ */
 const FEATURE_DETAILS_FORMAT: &str = r#"
 <ID> (<SHORT_NAME>.<SERIAL>/<DETAIL>)
   <CAPTURE_TIME> cloudy: <CLOUD_COVER>
@@ -35,7 +42,11 @@ const FEATURE_DETAILS_FORMAT: &str = r#"
   procuct: <PRODUCT_HREF>
 "#;
 
-// Maps some color words to function calls to apply settings
+/*
+ * Function to map color values to Colorize function calls, which colors output
+ * strings. This might not include all the available colors from Colorize, just
+ * those I tested with.
+ */
 fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
     let style = styles.get(k);
     match style {
@@ -58,6 +69,18 @@ fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
     }
 }
 
+/*
+ * Converts feature ids to a string here for display. GeoJSON is flexible about
+ * typing, but we just want strings here, since we're just gonna print them out.
+ */
+pub fn get_id(id: &Option<Id>) -> Option<String> {
+    match id {
+        Some(Id::String(v)) => Some(v.clone()),
+        Some(Id::Number(n)) => Some(n.to_string()),
+        None => None
+    }
+}
+
 // Path into a geojson::JsonObject to retrieve a nested value
 pub fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
     let mut v: &JsonObject = if let Some(v) = m { v } else { return None };
@@ -70,15 +93,6 @@ pub fn from_path(path: Vec<&str>, m: &Option<JsonObject>) -> Option<Value> {
         }
     }
     t
-}
-
-// Converts feature ids to a string here for display.
-pub fn get_id(id: &Option<Id>) -> Option<String> {
-    match id {
-        Some(Id::String(v)) => Some(v.clone()),
-        Some(Id::Number(n)) => Some(n.to_string()),
-        None => None
-    }
 }
 
 // Unwraps serde_json::Value and converts it to a string for display
@@ -104,7 +118,13 @@ pub fn get_value(value_opt: Option<Value>) -> Option<String> {
     }
 }
 
-pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
+/*
+ * Parses a specific datetime format OR a date value into a datetime value.
+ * There's some added convenience here for converting dates into datetimes by
+ * getting min or max time values, which are usually a bit annoying to type out
+ * over and over if working from the CLI.
+ */
+pub fn parse_date(s: String, should_adjust: Option<TimeAdjust>) -> Result<DateTime<Utc>, Box<dyn Error>> {
     let s = s.as_str();
     let parsed = DateTime::parse_from_rfc3339(s); // Subset of ISO 8601
     match parsed {
@@ -113,7 +133,13 @@ pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
             // Parse a date, then zero out the time and convert to DateTime<Utc>
             let parsed = NaiveDate::parse_from_str(s, "%F");
             if let Ok(dt) = parsed {
-                Ok(dt.and_hms_opt(0,0,0).unwrap().and_utc())
+                match should_adjust {
+                    Some(TimeAdjust::Floor) => Ok(dt.and_hms_opt(0,0,0).unwrap().and_utc()),
+                    Some(TimeAdjust::Ceil) => Ok(dt.and_hms_opt(23,59,59).unwrap().and_utc()),
+                    // If no adjustment was requested but we have a short date, we still have to
+                    // apply a value here, and this might be the most sensible for ranges.
+                    None => Ok(dt.and_hms_opt(0,0,0).unwrap().and_utc()),
+                }
             } else {
                 Err(format!("Unable to parse: {}", s).into())
             }
@@ -123,6 +149,11 @@ pub fn parse_date(s: String) -> Result<DateTime<Utc>, Box<dyn Error>> {
 
 // Display methods
 
+/*
+ * List and Serach endpoints will return feature collections, so this is a top
+ * level display function so that we can just print out whatever came back
+ * for the provided query.
+ */
 pub fn format_feature_collection(fc: &FeatureCollection) -> String {
     let mut output: Vec<String> = Vec::new();
     for feature in fc.features.clone() {
@@ -131,6 +162,10 @@ pub fn format_feature_collection(fc: &FeatureCollection) -> String {
     output.join("\n")
 }
 
+/*
+ * Feature display method. Extracts information from the feature and passes
+ * it along to the templating function to generate finalized output.
+ */
 pub fn format_feature(f: &Feature) -> String {
     // Top level feature attributes
     let id = get_id(&f.id);
@@ -160,6 +195,11 @@ pub fn format_feature(f: &Feature) -> String {
     format_with_template(FEATURE_DETAILS_FORMAT, &data)
 }
 
+/*
+ * Takes a template and a HashMap of values and interpolates them. Will also use
+ * the STYLES information at the top of the file to colorize output, though how
+ * useful this is depends on the end users' terminal configuration.
+ */
 fn format_with_template(template: &str, data: &HashMap<&str, Option<String>>) -> String {
     let mut compiled = String::from(template).truecolor(64, 64, 64).to_string();
     let styles = HashMap::from(STYLES);

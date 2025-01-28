@@ -110,8 +110,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         },
         ModeIntent::Download => {
             let mut s = Spinner::new(Spinners::Dots, "Querying for imagery with id...".into());
-            // This still requires a collection, which for now will default to S2
-            // In the future we should search, which doesn't require a specific collection
             let fc = search_imagery(&client, &auth_details, args.clone().into()).await?;
             s.stop_with_newline();
             if fc.features.is_empty() {

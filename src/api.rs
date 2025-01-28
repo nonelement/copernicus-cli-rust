@@ -22,6 +22,7 @@ use crate::util::{get_id, get_value, from_path};
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 // GET
+// LIST_URL is a template and requires a Collection ID, e.g. SENTINEL-2
 const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/{}/items";
 const SEARCH_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/search";
 
@@ -50,6 +51,10 @@ enum AuthState {
 
 // Authentication
 
+/*
+ * We save some timestamps on our auth object so we can know whether we have to
+ * refresh, reacquire, or can just use the saved auth details.
+ */
 fn get_auth_state(auth_details: &AuthDetails) -> Result<AuthState, Box<dyn Error>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let is_expired = now > (auth_details.acquired_time + auth_details.expires_in as i64).try_into()?;
@@ -63,6 +68,9 @@ fn get_auth_state(auth_details: &AuthDetails) -> Result<AuthState, Box<dyn Error
     }
 }
 
+/*
+ * Checks the auth object and does whatever's necessary to get a working auth value.
+ */
 pub async fn check_auth(auth_details: Option<AuthDetails>, credentials: &Credentials) -> Result<AuthDetails, Box<dyn Error>> {
     match auth_details {
         None => {
@@ -74,15 +82,15 @@ pub async fn check_auth(auth_details: Option<AuthDetails>, credentials: &Credent
                 Ok(auth_state) => {
                     match auth_state {
                         AuthState::IsOK => {
-                            info!("Auth: Existing auth ok, resuing.");
+                            debug!("Auth: Existing auth ok, resuing.");
                             Ok(auth_details) // TODO: This returns the moved value. Is this ok?
                         },
                         AuthState::NeedsRefresh => {
-                            info!("Auth: Refreshing auth.");
+                            debug!("Auth: Refreshing auth.");
                             Ok(refresh_authentication(&auth_details).await?)
                         },
                         AuthState::NeedsReauthentication => {
-                            info!("Auth: Reacquiring auth.");
+                            debug!("Auth: Reacquiring auth.");
                             Ok(authenticate_credentials(credentials).await?)
                         }
                     }
@@ -93,6 +101,9 @@ pub async fn check_auth(auth_details: Option<AuthDetails>, credentials: &Credent
     }
 }
 
+/*
+ * Common function used when generating or refreshing.
+ */
 async fn authenticate(form_body: &HashMap<&str, String>) -> Result<AuthDetails, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let response: Response = client.post(AUTH_URL).form(form_body).send().await?;
@@ -108,6 +119,9 @@ async fn authenticate(form_body: &HashMap<&str, String>) -> Result<AuthDetails, 
     }
 }
 
+/*
+ * Credentials are required for a new auth object.
+ */
 pub async fn authenticate_credentials(credentials: &Credentials) -> Result<AuthDetails, Box<dyn Error>> {
     let form_body = if let (Some(user), Some(pass)) = (credentials.user.clone(), credentials.pass.clone()) {
         HashMap::from([
@@ -122,6 +136,9 @@ pub async fn authenticate_credentials(credentials: &Credentials) -> Result<AuthD
     authenticate(&form_body).await
 }
 
+/*
+ * Refreshing our auth requires slightly different headers from the from-scratch flow.
+ */
 pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDetails, Box<dyn Error>> {
     let form_body = HashMap::from([
         ("client_id", String::from("cdse-public")),
@@ -133,7 +150,9 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 
 // API Interactions
 
-// Params for list endpoint. Most can be used together to filter results.
+/*
+ * Params for the search endpoints: List, Search
+ */
 pub struct QueryParams {
     pub ids: Option<String>,
     pub collections: Option<String>,
@@ -145,6 +164,9 @@ pub struct QueryParams {
     pub page: Option<u16>,
 }
 
+/*
+ * impl to make converting from passed args to search params easy.
+ */
 impl From<Args> for QueryParams {
     fn from(a: Args) -> Self {
         let Args { ids, collections, bbox, from, to, sortby, limit, page, .. } = a;
@@ -152,8 +174,10 @@ impl From<Args> for QueryParams {
     }
 }
 
-// Generates query params from QueryParams
-// Return value matches interface provided by Url.set_query
+/*
+ * Generates query params from QueryParams
+ * Return value matches interface provided by Url.set_query
+ */
 fn generate_query(
     query_params: QueryParams,
     include_collections: bool,
@@ -201,6 +225,9 @@ fn generate_query(
     }
 }
 
+/*
+ * Performs some checking and adds a collection to a template url.
+ */
 fn with_collection(url: &'static str, collection: &Option<String>) -> Result<String, Box<dyn Error>> {
     // Can be used as a template
     if let Some(collection_ids) = collection {
@@ -221,6 +248,10 @@ fn with_collection(url: &'static str, collection: &Option<String>) -> Result<Str
     }
 }
 
+
+/*
+ * Gets some values from a response object: length, file details.
+ */
 fn get_header_info(r: &Response) -> (usize, String) {
     let h = r.headers();
     // Get header value, assume string and not bytes, then convert to usize.
@@ -234,11 +265,16 @@ fn get_header_info(r: &Response) -> (usize, String) {
     (length, disposition_file)
 }
 
+/*
+ * Composes a path and output file for downloads.
+ */
 fn compose_path(path: String, name: &String) -> PathBuf {
     [&path, &format!("{name}.zip")].iter().collect()
 }
 
-// Queries for imagery that satisfies constraints
+/*
+ * Queries a specific collection for imagery that matches the query params.
+ */
 pub async fn list_imagery(
     client: &Client,
     auth_details: &AuthDetails,
@@ -281,12 +317,21 @@ pub async fn search_imagery(
     Ok(fc)
 }
 
+/*
+ * Small output struct for conveying some download details to the caller.
+ */
 #[derive(Debug)]
 pub struct DownloadDetails {
     pub destination: PathBuf,
     pub size: usize,
 }
 
+/*
+ * Downloads imagery product for passed feature. The Copernicus Program's search
+ * output takes the shape of features in a feature collection, which each feature
+ * containing metadata that describes where to get its quicklook and product
+ * bundle, i.e. imagery.
+ */
 pub async fn download_imagery(
     client: &Client,
     auth_details: &AuthDetails,
