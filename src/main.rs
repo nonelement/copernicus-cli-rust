@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("{} bytes, saved to: {}", details.size, details.destination.to_str().unwrap_or("_"));
             Ok(())
         },
-        ModeIntent::Error(reason) => Err(format!("Something went wrong: {}", reason).into()),
+        ModeIntent::Error(reason) => Err(format!("Something went wrong: {reason}").into()),
         _ => Ok(()) // Catch for all other types, like unknown or NYIs.
     }
 }

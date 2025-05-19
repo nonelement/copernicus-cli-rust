@@ -115,7 +115,7 @@ async fn authenticate(form_body: &HashMap<&str, String>) -> Result<AuthDetails, 
         Ok(auth_details)
     } else {
         // Debug ok here, since this is effectively a stop error
-        Err(format!("authentication response was abnormal: {:?}", response).into())
+        Err(format!("authentication response was abnormal: {response:?}").into())
     }
 }
 
@@ -185,11 +185,11 @@ fn generate_query(
     let mut options: Vec<String> = Vec::new();
 
     if let Some(ids) = query_params.ids {
-        options.push(format!("ids={}", ids));
+        options.push(format!("ids={ids}"));
     }
 
     if let Some(bbox) = query_params.bbox {
-        options.push(format!("bbox={}", bbox));
+        options.push(format!("bbox={bbox}"));
     }
 
     if query_params.from.is_some() || query_params.to.is_some() {
@@ -201,20 +201,20 @@ fn generate_query(
     }
 
     if let Some(sortby) = query_params.sortby {
-        options.push(format!("sortby={}", sortby));
+        options.push(format!("sortby={sortby}"));
     }
 
     if let Some(limit) = query_params.limit {
-        options.push(format!("limit={}", limit));
+        options.push(format!("limit={limit}"));
     }
 
     if let Some(page) = query_params.page {
-        options.push(format!("page={}", page));
+        options.push(format!("page={page}"));
     }
 
     if include_collections {
         if let Some(collections) = query_params.page {
-            options.push(format!("collections={}", collections));
+            options.push(format!("collections={collections}"));
         }
     }
 
@@ -339,7 +339,8 @@ pub async fn download_imagery(
     output_dir: Option<String>,
 ) -> Result<DownloadDetails, Box<dyn Error>> {
     let feature_id = get_id(&feature.id);
-    let product_url = get_value(from_path(vec!["assets", "PRODUCT", "href"], &feature.foreign_members));
+    let path = Vec::from(["assets", "PRODUCT", "href"]);
+    let product_url = get_value(from_path(path, &feature.foreign_members));
     if let (Some(id), Some(catalogue_href)) = (feature_id, product_url) {
         // This seems to be required by the API. The URI we obtain has the catalogue subdomain, and
         // when curl'ed or wget'ed the API responds with a 301 redirecting to the download
@@ -384,8 +385,8 @@ pub async fn download_imagery(
                 size: bytes_total
             })
         } else {
-            println!("failed. response:\n{:#?}", response);
-            Err(format!("Failure response from server: {:#?}", response).into())
+            println!("failed. response:\n{response:#?}");
+            Err(format!("Failure response from server: {response:#?}").into())
         }
     } else {
         Err(format!("Unable to download resource {:?}", feature.id).into())

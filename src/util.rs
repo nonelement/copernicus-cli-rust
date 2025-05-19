@@ -141,7 +141,7 @@ pub fn parse_date(s: String, should_adjust: Option<TimeAdjust>) -> Result<DateTi
                     None => Ok(dt.and_hms_opt(0,0,0).unwrap().and_utc()),
                 }
             } else {
-                Err(format!("Unable to parse: {}", s).into())
+                Err(format!("Unable to parse: {s}").into())
             }
         }
     }
@@ -179,8 +179,8 @@ pub fn format_feature(f: &Feature) -> String {
     // Atmospheric values
     let cloud_cover: Option<String> = get_value(properties.get("cloudCover").cloned());
     // Product links
-    let quicklook_href: Option<String> = get_value(from_path(vec!["assets", "QUICKLOOK", "href"], &f.foreign_members));
-    let product_href: Option<String> = get_value(from_path(vec!["assets", "PRODUCT", "href"], &f.foreign_members));
+    let quicklook_href: Option<String> = get_value(from_path(Vec::from(["assets", "QUICKLOOK", "href"]), &f.foreign_members));
+    let product_href: Option<String> = get_value(from_path(Vec::from(["assets", "PRODUCT", "href"]), &f.foreign_members));
     let data = HashMap::from([
         ("ID", id),
         ("SHORT_NAME", short_name),
@@ -205,7 +205,7 @@ fn format_with_template(template: &str, data: &HashMap<&str, Option<String>>) ->
     let styles = HashMap::from(STYLES);
     for (k, mv) in data {
         let v = if let Some(v) = mv { v } else { &String::from("N/A") };
-        let tag = format!("<{}>", k);
+        let tag = format!("<{k}>");
         let value = style_value(k, v.clone(), &styles);
         compiled = compiled.replace(&tag, &value);
     }

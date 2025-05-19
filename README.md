@@ -15,7 +15,7 @@ ends, but is an interesting basis from which to develop those things.
 
 Add a .env file that looks like the included template with your Copernicus Data Space Ecosystem.
 
-Registration [here](https://documentation.dataspace.copernicus.eu/Registration.html).
+Registration is [here](https://documentation.dataspace.copernicus.eu/Registration.html).
 
 
 ## Running / Testing
