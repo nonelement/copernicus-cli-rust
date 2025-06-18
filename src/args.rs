@@ -106,7 +106,6 @@ fn get_standard_args(m: &ArgMatches) -> Args {
  * configuration, below.
  */
 fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
-    let collections_default = String::from("SENTINEL-2");
     match am.subcommand() {
         Some(("list", submatch)) => {
             // Options
@@ -130,7 +129,7 @@ fn get_args_from_match(am: ArgMatches) -> Result<Args, Box<dyn Error>> {
             // Settings w defaults
             args.intent = ModeIntent::Download;
             args.collections = submatch.get_one::<String>("collections").cloned()
-                .or(Some(collections_default));
+                .or(None);
             args.output_dir = submatch.get_one::<String>("output").cloned()
                 .or(Some(String::from(".")));
             Ok(args)
@@ -211,7 +210,7 @@ pub fn get_args() -> Args {
                 )
                 .arg(Arg::new("collections")
                     .long("collections")
-                    .help("specify which collection to query. Default: SENTINEL-2")
+                    .help("specify which collection to query.")
                 )
                 .about("Download imagery using ids obtained through search or list")
                 .arg(Arg::new("output")
