@@ -12,7 +12,6 @@ use serde_json::Map;
 use serde_json::Value;
 
 use crate::args::TimeAdjust;
-
 /*
  * Hardcoded style information for List and Search outputs. At the moment these
  * are all set to conservative (read: useless?) values.
@@ -39,7 +38,7 @@ const FEATURE_DETAILS_FORMAT: &str = r#"
   <CAPTURE_TIME> cloudy: <CLOUD_COVER>
   bbox: <BBOX>
   quicklook: <QUICKLOOK_HREF>
-  procuct: <PRODUCT_HREF>
+  product: <PRODUCT_HREF>
 "#;
 
 /*
@@ -124,8 +123,7 @@ pub fn get_value(value_opt: Option<Value>) -> Option<String> {
  * getting min or max time values, which are usually a bit annoying to type out
  * over and over if working from the CLI.
  */
-pub fn parse_date(s: String, should_adjust: Option<TimeAdjust>) -> Result<DateTime<Utc>, Box<dyn Error>> {
-    let s = s.as_str();
+pub fn parse_date(s: &str, should_adjust: Option<TimeAdjust>) -> Result<DateTime<Utc>, Box<dyn Error + Send + Sync>> {
     let parsed = DateTime::parse_from_rfc3339(s); // Subset of ISO 8601
     match parsed {
         Ok(dt) => Ok(dt.into()),

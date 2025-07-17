@@ -21,13 +21,14 @@ mod util;
 use std::env::var;
 use std::error::Error;
 
+use clap::Parser;
 use dotenv::dotenv;
 use log::info;
 use serde::{Serialize, Deserialize};
 use spinners::{Spinner, Spinners};
 
-use args::{ModeIntent, get_args};
-use api::{AuthDetails, check_auth, download_imagery, list_imagery, search_imagery};
+use args::{CliArgs, Mode};
+use api::{AuthDetails, check_auth, download_imagery, search_imagery};
 use util::format_feature_collection;
 
 const APP_NAME: &str = "COPERNICUS-CLI";
@@ -67,7 +68,10 @@ struct Credentials {
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     dotenv().ok();
-    let args = get_args();
+
+    // Use Result type instead, use ? here to exit immediately
+    // let args = get_args()?;
+    let args = CliArgs::parse();
 
     let mut config: Config = confy::load(APP_NAME, None)?;
     let credentials = get_env_creds();
@@ -93,37 +97,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     config.auth_details = Some(auth_details.clone());
     confy::store(APP_NAME, None, config)?;
 
-    match args.intent {
-        ModeIntent::List => {
-            let mut s = Spinner::new(Spinners::Dots, "Querying for imagery...".into());
-            let fc = list_imagery(&client, &auth_details, args.into()).await?;
-            s.stop_with_newline();
-            println!("List results:\n{}", format_feature_collection(&fc));
-            Ok(())
-        },
-        ModeIntent::Search => {
+    match args.mode {
+        Mode::Search(search_args) => {
             let mut s = Spinner::new(Spinners::Dots, "Searching for imagery...".into());
-            let fc = search_imagery(&client, &auth_details, args.into()).await?;
+            let fc = search_imagery(&client, &auth_details, search_args.into()).await?;
             s.stop_with_newline();
             println!("Search results:\n{}", format_feature_collection(&fc));
             Ok(())
         },
-        ModeIntent::Download => {
+        Mode::Download(download_args) => {
             let mut s = Spinner::new(Spinners::Dots, "Querying for imagery with id...".into());
-            let fc = search_imagery(&client, &auth_details, args.clone().into()).await?;
+            let fc = search_imagery(&client, &auth_details, download_args.clone().into()).await?;
             s.stop_with_newline();
             if fc.features.is_empty() {
-                return Err(format!("No imagery found for id: {:?}", args.ids).into());
+                return Err(format!("No imagery found for id: {:?}", download_args.ids).into());
             }
             let mut s = Spinner::new(Spinners::Dots, "Downloading imagery...".into());
-            let details = download_imagery(&client, &auth_details, &fc.features[0], args.output_dir).await?;
+            let details = download_imagery(&client, &auth_details, &fc.features[0], download_args.output_dir).await?;
             s.stop_with_newline();
             println!("Download complete.");
             println!("{} bytes, saved to: {}", details.size, details.destination.to_str().unwrap_or("_"));
             Ok(())
         },
-        ModeIntent::Error(reason) => Err(format!("Something went wrong: {reason}").into()),
-        _ => Ok(()) // Catch for all other types, like unknown or NYIs.
     }
 }
 

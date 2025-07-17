@@ -16,14 +16,13 @@ use serde::{Serialize, Deserialize};
 use url::Url;
 
 use crate::Credentials;
-use crate::args::Args;
+use crate::args::{DownloadArgs, SearchArgs};
 use crate::util::{get_id, get_value, from_path};
 
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
 // GET
 // LIST_URL is a template and requires a Collection ID, e.g. SENTINEL-2
-const LIST_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/collections/{}/items";
 const SEARCH_URL: &str = "https://catalogue.dataspace.copernicus.eu/stac/search";
 
 // Core auth struct. Gets saved and updated each run with new information.
@@ -153,6 +152,7 @@ pub async fn refresh_authentication(auth_details: &AuthDetails) -> Result<AuthDe
 /*
  * Params for the search endpoints: List, Search
  */
+#[derive(Debug, Default)]
 pub struct QueryParams {
     pub ids: Option<String>,
     pub collections: Option<String>,
@@ -167,10 +167,16 @@ pub struct QueryParams {
 /*
  * impl to make converting from passed args to search params easy.
  */
-impl From<Args> for QueryParams {
-    fn from(a: Args) -> Self {
-        let Args { ids, collections, bbox, from, to, sortby, limit, page, .. } = a;
+impl From<SearchArgs> for QueryParams {
+    fn from(a: SearchArgs) -> Self {
+        let SearchArgs { ids, collections, bbox, from, to, sortby, limit, page, .. } = a;
         QueryParams { ids, collections, bbox, from, to, sortby, limit, page }
+    }
+}
+
+impl From<DownloadArgs> for QueryParams {
+    fn from(da: DownloadArgs) -> Self {
+        QueryParams { ids: da.ids, ..Default::default() }
     }
 }
 
@@ -213,7 +219,7 @@ fn generate_query(
     }
 
     if include_collections {
-        if let Some(collections) = query_params.page {
+        if let Some(collections) = query_params.collections {
             options.push(format!("collections={collections}"));
         }
     }
@@ -222,29 +228,6 @@ fn generate_query(
         Some(options.join("&"))
     } else {
         None
-    }
-}
-
-/*
- * Performs some checking and adds a collection to a template url.
- */
-fn with_collection(url: &'static str, collection: &Option<String>) -> Result<String, Box<dyn Error>> {
-    // Can be used as a template
-    if let Some(collection_ids) = collection {
-        let mut collection_id = collection_ids.clone();
-        // Use first collection id if multiple
-        if collection_ids.contains(",") {
-            if let Some(first_id) = collection_ids.split(",").next() {
-                collection_id = first_id.to_string();
-            }
-        }
-        if url.contains("{}") {
-            Ok(url.replace("{}", &collection_id))
-        } else {
-            Err("Unable to use provided url as a template.".into())
-        }
-    } else {
-        Err("No collection provided.".into())
     }
 }
 
@@ -272,30 +255,6 @@ fn compose_path(path: String, name: &String) -> PathBuf {
     [&path, &format!("{name}.zip")].iter().collect()
 }
 
-/*
- * Queries a specific collection for imagery that matches the query params.
- */
-pub async fn list_imagery(
-    client: &Client,
-    auth_details: &AuthDetails,
-    query_params: QueryParams,
-) -> Result<FeatureCollection, Box<dyn Error>> {
-    let mut url: Url = Url::parse(&with_collection(LIST_URL, &query_params.collections)?)?;
-    let query_params = generate_query(query_params, false);
-    url.set_query(query_params.as_deref());
-
-    info!("API::list_imagery: Requesting {}...", url);
-    let response_text = client
-        .get(url)
-        .header("Authorization", format!("Bearer {}", auth_details.access_token))
-        .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
-    info!("API::list_imagery: Response: \n{}", response_text);
-    // println!("response text: {}", response_text);
-    let geojson = response_text.parse::<GeoJson>()?;
-    let fc: FeatureCollection = FeatureCollection::try_from(geojson)?;
-    Ok(fc)
-}
-
 // Queries for imagery that satisfies constraints
 pub async fn search_imagery(
     client: &Client,
@@ -306,12 +265,12 @@ pub async fn search_imagery(
     let query_params = generate_query(query_params, true);
     url.set_query(query_params.as_deref());
 
-    info!("API::list_imagery: Requesting {}...", url);
+    info!("API::list_imagery: Requesting {url}...");
     let response_text = client
         .get(url)
         .header("Authorization", format!("Bearer {}", auth_details.access_token))
         .send().await.unwrap().text().await.unwrap_or(String::from("{}"));
-    info!("API::list_imagery: Response: \n{}", response_text);
+    info!("API::list_imagery: Response: \n{response_text}");
     let geojson = response_text.parse::<GeoJson>()?;
     let fc: FeatureCollection = FeatureCollection::try_from(geojson)?;
     Ok(fc)
@@ -367,11 +326,11 @@ pub async fn download_imagery(
                 if let Some(bytes) = stream.next().await {
                     match f.write(&bytes?) {
                         Ok(n) => {
-                            debug!("wrote {} bytes", n);
+                            debug!("wrote {n} bytes");
                             bytes_total += n;
                         },
                         Err(e) => {
-                            error!("Something went wrong: {}", e);
+                            error!("Something went wrong: {e}");
                             break;
                         }
                     }
