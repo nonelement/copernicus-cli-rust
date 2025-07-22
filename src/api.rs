@@ -251,8 +251,12 @@ fn get_header_info(r: &Response) -> (usize, String) {
 /*
  * Composes a path and output file for downloads.
  */
-fn compose_path(path: String, name: &String) -> PathBuf {
-    [&path, &format!("{name}.zip")].iter().collect()
+fn compose_path(opt_path: Option<String>, name: &String) -> PathBuf {
+    if let Some(path) = opt_path {
+        [&path, &format!("{name}.zip")].iter().collect()
+    } else {
+        ["./", &format!("{name}.zip")].iter().collect()
+    }
 }
 
 // Queries for imagery that satisfies constraints
@@ -318,7 +322,7 @@ pub async fn download_imagery(
         if response.status().is_success() {
             // Unused at the moment, but will let us show some extra info during downloads
             let (_length, _file) = get_header_info(&response);
-            let path = compose_path(output_dir.unwrap(), &id);
+            let path = compose_path(output_dir, &id);
             let mut f = File::create(&path)?;
             let mut stream = response.bytes_stream();
             let mut bytes_total: usize = 0;
