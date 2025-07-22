@@ -13,11 +13,12 @@ use geojson::{Feature, FeatureCollection, GeoJson};
 use log::{debug, info, error};
 use reqwest::{Client, Response};
 use serde::{Serialize, Deserialize};
+use spinners::{Spinner, Spinners};
 use url::Url;
 
 use crate::Credentials;
 use crate::args::{DownloadArgs, SearchArgs};
-use crate::util::{get_id, get_value, from_path};
+use crate::util::{get_id, get_value, from_path, print_over};
 
 // POST
 const AUTH_URL: &str = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token";
@@ -301,6 +302,7 @@ pub async fn download_imagery(
     feature: &Feature,
     output_dir: Option<String>,
 ) -> Result<DownloadDetails, Box<dyn Error>> {
+    let mut s = Spinner::new(Spinners::Dots, "Preparing download...".into());
     let feature_id = get_id(&feature.id);
     let path = Vec::from(["assets", "PRODUCT", "href"]);
     let product_url = get_value(from_path(path, &feature.foreign_members));
@@ -317,21 +319,24 @@ pub async fn download_imagery(
             .get(url)
             .timeout(Duration::from_secs(1_000_000))
             .header("Authorization", format!("Bearer {}", auth_details.access_token));
+        s.stop_with_newline();
         let response = request.send().await?;
         // Create file, write byte stream
         if response.status().is_success() {
+            print_over("Downloading. 0%");
             // Unused at the moment, but will let us show some extra info during downloads
-            let (_length, _file) = get_header_info(&response);
+            let (total_length, _file) = get_header_info(&response);
             let path = compose_path(output_dir, &id);
             let mut f = File::create(&path)?;
             let mut stream = response.bytes_stream();
-            let mut bytes_total: usize = 0;
+            let mut bytes_written: usize = 0;
             loop {
                 if let Some(bytes) = stream.next().await {
                     match f.write(&bytes?) {
                         Ok(n) => {
-                            debug!("wrote {n} bytes");
-                            bytes_total += n;
+                            bytes_written += n;
+                            let percentage = (bytes_written as f64) / (total_length as f64) * 100.0;
+                            print_over(&format!("Downloading. {percentage:.2}%"));
                         },
                         Err(e) => {
                             error!("Something went wrong: {e}");
@@ -343,9 +348,10 @@ pub async fn download_imagery(
                     break;
                 }
             }
+            println!("\nDownload complete.");
             Ok(DownloadDetails {
                 destination: path,
-                size: bytes_total
+                size: bytes_written
             })
         } else {
             println!("failed. response:\n{response:#?}");

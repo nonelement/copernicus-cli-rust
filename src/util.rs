@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::{stdout, Write};
 
 use chrono::offset::Utc;
 use chrono::{DateTime, NaiveDate};
@@ -66,6 +67,14 @@ fn style_value(k: &str, v: String, styles: &HashMap<&str, &str>) -> String {
         },
         None => v,
     }
+}
+
+/*
+ * Prints over the last line, through use of \r, then flushes stdout.
+ */
+pub fn print_over(s: &str) {
+    print!("\r{s}");
+    let _ = stdout().flush();
 }
 
 /*

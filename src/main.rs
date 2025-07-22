@@ -112,10 +112,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if fc.features.is_empty() {
                 return Err(format!("No imagery found for id: {:?}", download_args.ids).into());
             }
-            let mut s = Spinner::new(Spinners::Dots, "Downloading imagery...".into());
             let details = download_imagery(&client, &auth_details, &fc.features[0], download_args.output_dir).await?;
-            s.stop_with_newline();
-            println!("Download complete.");
             println!("{} bytes, saved to: {}", details.size, details.destination.to_str().unwrap_or("_"));
             Ok(())
         },
