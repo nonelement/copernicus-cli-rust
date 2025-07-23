@@ -236,15 +236,29 @@ fn generate_query(
 /*
  * Gets some values from a response object: length, file details.
  */
-fn get_header_info(r: &Response) -> (usize, String) {
+fn get_header_info(r: &Response) -> (Option<usize>, Option<String>) {
     let h = r.headers();
     // Get header value, assume string and not bytes, then convert to usize.
-    let length_value = if let Some(v) = h.get("content-length") { v.to_str() } else { Ok("0") };
-    let length = if let Ok(l) = length_value { l.parse::<usize>().unwrap_or(0) } else { 0 };
+    let length = if let Some(value) = h.get("content-length") {
+        if let Ok(length_str) = value.to_str() {
+            length_str.parse::<usize>().ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Get header value, convert to strings, don't bother parsing them yet.
-    let disposition_value = if let Some(v) = h.get("content-disposition") { v.to_str() } else { Ok("") };
-    let full_disposition = if let Ok(dv) = disposition_value { String::from(dv) } else { String::new() };
-    let disposition_file = full_disposition.split("filename=").last().unwrap_or("").to_string();
+    let disposition_file = if let Some(v) = h.get("content-disposition") {
+        if let Ok(dv) = v.to_str() {
+            Some(String::from(dv).split("filename=").last().unwrap_or("").to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     (length, disposition_file)
 }
@@ -319,24 +333,28 @@ pub async fn download_imagery(
             .get(url)
             .timeout(Duration::from_secs(1_000_000))
             .header("Authorization", format!("Bearer {}", auth_details.access_token));
-        s.stop_with_newline();
         let response = request.send().await?;
         // Create file, write byte stream
+        s.stop_with_newline();
         if response.status().is_success() {
-            print_over("Downloading. 0%");
-            // Unused at the moment, but will let us show some extra info during downloads
-            let (total_length, _file) = get_header_info(&response);
+            print_over("Downloading...");
+            // Fetch some header values to inform our download
+            let (header_length, _header_disposition) = get_header_info(&response);
+            let total_length = header_length.unwrap_or_default();
             let path = compose_path(output_dir, &id);
             let mut f = File::create(&path)?;
             let mut stream = response.bytes_stream();
+
             let mut bytes_written: usize = 0;
             loop {
                 if let Some(bytes) = stream.next().await {
                     match f.write(&bytes?) {
                         Ok(n) => {
                             bytes_written += n;
-                            let percentage = (bytes_written as f64) / (total_length as f64) * 100.0;
-                            print_over(&format!("Downloading. {percentage:.2}%"));
+                            if total_length > 0 {
+                                let percentage = (bytes_written as f64) / (total_length as f64) * 100.0;
+                                print_over(&format!("Downloading. {percentage:.2}%"));
+                            }
                         },
                         Err(e) => {
                             error!("Something went wrong: {e}");
